@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nurse Scheduler Pro - Professional Shift Management</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="Professional nurse shift scheduling application with drag-and-drop interface, workload management, and comprehensive reporting.">
+    <meta name="theme-color" content="#2563eb">
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Apple PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="NurseScheduler">
+    
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Custom CSS Variables for Color Palette -->
+    <style>
+      :root {
+        --foreground-rgb: 15, 23, 42;
+        --background-start-rgb: 248, 250, 252;
+        --background-end-rgb: 255, 255, 255;
+        --primary-blue: 37, 99, 235;
+        --primary-indigo: 79, 70, 229;
+        --accent-blue: 59, 130, 246;
+      }
+      
+      body {
+        margin: 0;
+        color: rgb(var(--foreground-rgb));
+        background: linear-gradient(to bottom, rgb(var(--background-start-rgb)), rgb(var(--background-end-rgb)));
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      
+      /* Loading Animation */
+      .loading-spinner {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(var(--primary-blue), 0.2);
+        border-radius: 50%;
+        border-top-color: rgb(var(--primary-blue));
+        animation: spin 1s ease-in-out infinite;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      
+      ::-webkit-scrollbar-track {
+        background: rgb(248, 250, 252);
+      }
+      
+      ::-webkit-scrollbar-thumb {
+        background: rgb(203, 213, 225);
+        border-radius: 4px;
+      }
+      
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgb(148, 163, 184);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <!-- Loading Screen -->
+      <div style="
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: linear-gradient(135deg, rgb(var(--primary-blue)), rgb(var(--primary-indigo)));
+        color: white;
+        font-family: system-ui, sans-serif;
+      ">
+        <div style="text-align: center;">
+          <div class="loading-spinner" style="border-color: rgba(255, 255, 255, 0.2); border-top-color: white; margin: 0 auto 20px;"></div>
+          <h1 style="margin: 0 0 10px; font-size: 24px; font-weight: 600;">Nurse Scheduler Pro</h1>
+          <p style="margin: 0; opacity: 0.8;">Loading your scheduling dashboard...</p>
+        </div>
+      </div>
+    </div>
+    
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registered: ', registration);
+            })
+            .catch((registrationError) => {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>
