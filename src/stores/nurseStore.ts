@@ -127,6 +127,10 @@ export const useNurseStore = create<NurseStore>((set, get) => ({
         loadingState: { isLoading: false, error: apiError.message },
         nurses: mockNurses // Use mock data on error
       });
+    } finally {
+      set({ 
+        loadingState: { isLoading: false, error: null },
+      });
     }
   },
 
@@ -144,6 +148,10 @@ export const useNurseStore = create<NurseStore>((set, get) => ({
     } catch (error) {
       const apiError = error as ApiError;
       set({ loadingState: { isLoading: false, error: apiError.message } });
+    } finally {
+      set({ 
+        loadingState: { isLoading: false, error: null },
+      });
     }
   },
 
@@ -167,6 +175,11 @@ export const useNurseStore = create<NurseStore>((set, get) => ({
       const apiError = error as ApiError;
       set({ loadingState: { isLoading: false, error: apiError.message } });
       throw error;
+    }
+    finally {
+      set({ 
+        loadingState: { isLoading: false, error: null },
+      });
     }
   },
 

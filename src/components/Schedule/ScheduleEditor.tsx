@@ -92,7 +92,7 @@ const ShiftItem: React.FC<{
             `}
           >
             {assignedNurses.map((nurse, index) => (
-              <Draggable key={nurse.id} draggableId={`nurse-${nurse.id}-${shift.id}`} index={index}>
+              <Draggable key={nurse.id} draggableId={nurse.id} index={index}>
                 {(provided, snapshot) => (
                   <div
                     ref={provided.innerRef}
@@ -103,6 +103,7 @@ const ShiftItem: React.FC<{
                       ${snapshot.isDragging ? 'shadow-lg rotate-2' : 'hover:shadow-md'}
                       transition-all cursor-move
                     `}
+                    style={provided.draggableProps.style}
                   >
                     <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white text-xs font-semibold">
                       {nurse.firstName[0]}{nurse.lastName[0]}
@@ -155,7 +156,7 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
   onShiftAdd,
 }) => {
   const { shifts, updateShift, loadingState } = useScheduleStore();
-  const { nurses } = useNurseStore();
+  const { nurses, loadingState: nursesLoading } = useNurseStore();
   const { addNotification } = useNotificationStore();
   
   const [conflicts, setConflicts] = useState<ScheduleConflict[]>([]);
@@ -165,9 +166,6 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
   const dayShifts = useMemo(() => {
     return shifts.filter(shift => isSameDay(new Date(shift.date), selectedDate));
   }, [shifts, selectedDate]);
-
-  // Memoize the date string for dependency comparison
-  const selectedDateString = useMemo(() => selectedDate.toISOString(), [selectedDate]);
 
   // Calculate conflicts and available nurses
   useEffect(() => {
@@ -193,22 +191,21 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
     const assignedNurseIds = new Set(dayShifts.flatMap(shift => shift.assignedNurses));
     const available = nurses.filter(nurse => !assignedNurseIds.has(nurse.id));
     setAvailableNurses(available);
-  }, [dayShifts, nurses, selectedDateString]); // Use selectedDateString for stable comparison
+  }, [dayShifts, nurses]);
 
   const handleDragEnd = useCallback(async (result: DropResult) => {
     const { destination, source, draggableId } = result;
 
     if (!destination) return;
 
-    // Extract nurse ID from draggableId
-    const nurseId = draggableId.split('-')[1];
+    const nurseId = draggableId;
     const sourceShiftId = source.droppableId.replace('shift-', '');
     const destShiftId = destination.droppableId.replace('shift-', '');
 
     if (sourceShiftId === destShiftId) return;
 
     try {
-      // Remove from source shift
+      // Remove from source shift (if not coming from available pool)
       if (sourceShiftId !== 'available') {
         const sourceShift = shifts.find(s => s.id === sourceShiftId);
         if (sourceShift) {
@@ -218,7 +215,7 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
         }
       }
 
-      // Add to destination shift
+      // Add to destination shift (if not going back to available pool)
       if (destShiftId !== 'available') {
         const destShift = shifts.find(s => s.id === destShiftId);
         if (destShift) {
@@ -241,7 +238,8 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
     }
   }, [shifts, updateShift, addNotification]);
 
-  if (loadingState.isLoading) {
+  // Show loading if nurses or shifts are still loading
+  if (loadingState.isLoading || nursesLoading.isLoading) {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-center h-64">
@@ -306,7 +304,7 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
                     `}
                   >
                     {availableNurses.map((nurse, index) => (
-                      <Draggable key={nurse.id} draggableId={`nurse-${nurse.id}-available`} index={index}>
+                      <Draggable key={nurse.id} draggableId={nurse.id} index={index}>
                         {(provided, snapshot) => (
                           <div
                             ref={provided.innerRef}
@@ -317,6 +315,7 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
                               ${snapshot.isDragging ? 'shadow-lg rotate-1' : 'hover:shadow-md'}
                               transition-all cursor-move
                             `}
+                            style={provided.draggableProps.style}
                           >
                             <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
                               {nurse.firstName[0]}{nurse.lastName[0]}
