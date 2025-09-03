@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Table, Wand2, Download, RefreshCw } from 'lucide-react';
 import { useScheduleStore } from '../../stores/scheduleStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useNurseStore } from '../../stores/nurseStore';
 import { ScheduleCalendar } from './ScheduleCalendar';
 import { ScheduleEditor } from './ScheduleEditor';
 import { ScheduleGenerator } from './ScheduleGenerator';
 import { ScheduleTable } from './ScheduleTable';
+import { ShiftDetailsModal } from './ShiftDetailsModal';
 import { Shift } from '../../types';
 
 interface SchedulePageProps {
@@ -15,10 +17,12 @@ interface SchedulePageProps {
 export const SchedulePage: React.FC<SchedulePageProps> = ({ onAddShift }) => {
   const { currentView, selectedDate, setCurrentView, setSelectedDate } = useUIStore();
   const { fetchSchedules, exportSchedule, loadingState } = useScheduleStore();
+  const { nurses } = useNurseStore();
   
   const [showGenerator, setShowGenerator] = useState(false);
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
   const [showShiftEditor, setShowShiftEditor] = useState(false);
+  const [showShiftDetails, setShowShiftDetails] = useState(false);
 
   useEffect(() => {
     fetchSchedules();
@@ -26,6 +30,11 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({ onAddShift }) => {
 
   const handleShiftClick = (shift: Shift) => {
     setSelectedShift(shift);
+    setShowShiftDetails(true);
+  };
+
+  const handleEditShift = () => {
+    setShowShiftDetails(false);
     setShowShiftEditor(true);
   };
 
@@ -157,6 +166,24 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({ onAddShift }) => {
       {/* Schedule Generator Modal */}
       {showGenerator && (
         <ScheduleGenerator onClose={() => setShowGenerator(false)} />
+      )}
+
+      {/* Shift Details Modal */}
+      {selectedShift && (
+        <ShiftDetailsModal
+          shift={selectedShift}
+          nurses={nurses}
+          isOpen={showShiftDetails}
+          onClose={() => setShowShiftDetails(false)}
+          onEdit={handleEditShift}
+        />
+      )}
+
+      {/* Shift Editor Modal (existing functionality) */}
+      {showShiftEditor && (
+        // Your existing shift editor component here
+        // This would be your current modal for editing shifts
+        <div>Shift Editor Component</div>
       )}
     </div>
   );

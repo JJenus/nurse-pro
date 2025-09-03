@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Bell, User, Calendar, Users } from 'lucide-react';
+import { Menu, Bell, User, Calendar } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 
@@ -8,17 +8,25 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ title }) => {
-  const { sidebarOpen, setSidebarOpen } = useUIStore();
+  const { sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
   const { notifications } = useNotificationStore();
 
   const unreadCount = notifications.length;
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-4 flex items-center justify-between">
+    <header className="sticky top-0 z-40 bg-white shadow-sm border-b border-gray-200 px-4 py-4 flex items-center justify-between">
       <div className="flex items-center gap-4">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors md:hidden"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        
+        {/* Desktop collapse button */}
+        <button
+          onClick={toggleSidebarCollapsed}
+          className="hidden md:block p-2 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <Menu className="h-5 w-5" />
         </button>
