@@ -8,7 +8,7 @@ class ApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
+      baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api',
       timeout: parseInt(import.meta.env.VITE_API_TIMEOUT) || 10000,
       headers: {
         'Content-Type': 'application/json',
@@ -66,18 +66,18 @@ class ApiClient {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  async get<T>(url: string): Promise<ApiResponse<T>> {
+  async get<T>(url: string, config?: any): Promise<ApiResponse<T>> {
     try {
-      const response: AxiosResponse<ApiResponse<T>> = await this.client.get(url);
+      const response: AxiosResponse<ApiResponse<T>> = await this.client.get(url, config);
       return response.data;
     } catch (error) {
       throw this.handleError(error as AxiosError);
     }
   }
 
-  async post<T>(url: string, data: any): Promise<ApiResponse<T>> {
+  async post<T>(url: string, data: any, config?: any): Promise<ApiResponse<T>> {
     try {
-      const response: AxiosResponse<ApiResponse<T>> = await this.client.post(url, data);
+      const response: AxiosResponse<ApiResponse<T>> = await this.client.post(url, data, config);
       return response.data;
     } catch (error) {
       throw this.handleError(error as AxiosError);
