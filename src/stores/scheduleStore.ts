@@ -41,15 +41,12 @@ interface ScheduleStore {
 		month: number,
 		year: number
 	) => Promise<void>;
-	exportSchedule: (
-		scheduleId: string,
-		format: "pdf" | "excel"
-	) => Promise<void>;
+
 	exportSchedules: (
 		months: number[],
 		year: number,
 		format: "pdf" | "excel"
-	)=> Promise<void>;
+	) => Promise<void>;
 	detectConflicts: (scheduleId: string) => Promise<void>;
 	setCurrentSchedule: (schedule: Schedule | null) => void;
 	setLoading: (isLoading: boolean) => void;
@@ -403,109 +400,77 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 		months: number[],
 		year: number,
 		format: "pdf" | "excel"
-	  ) => {
+	) => {
 		set({ loadingState: { isLoading: true, error: null } });
 		try {
-		  const response = await apiClient.get<any>(
-			`/schedules/export?months=${months.join(",")}&year=${year}&format=${format}`,
-			{
-			  responseType: "blob",
-			}
-		  );
-		  
-		  // Handle different response structures
-		  let blobData;
-		  if (response.data instanceof Blob) {
-			blobData = response.data;
-		  } else if (response.data?.data instanceof Blob) {
-			// If the blob is nested in a data property
-			blobData = response.data.data;
-		  } else if (response.data instanceof ArrayBuffer) {
-			// Convert ArrayBuffer to Blob
-			blobData = new Blob([response.data], { 
-			  type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-			});
-		  } else {
-			// Try to create blob from whatever data we received
-			const data = response.data || response;
-			blobData = new Blob([JSON.stringify(data)], { type: 'application/octet-stream' });
-		  }
-	  
-		  if (!(blobData instanceof Blob)) {
-			throw new Error("Failed to create blob from response data");
-		  }
-	  
-		  const url = window.URL.createObjectURL(blobData);
-		  const link = document.createElement("a");
-		  link.href = url;
-		  link.setAttribute(
-			"download",
-			`schedules-${year}-${months.join("_")}.${format}`
-		  );
-		  document.body.appendChild(link);
-		  link.click();
-		  document.body.removeChild(link);
-		  window.URL.revokeObjectURL(url);
-		  
-		  set({ loadingState: { isLoading: false, error: null } });
-		  useNotificationStore.getState().addNotification({
-			type: "success",
-			title: "Schedules Exported",
-			message: `Successfully exported schedules for ${months.join(", ")}/${year} as ${format}`,
-		  });
-		} catch (error) {
-		  const errorMessage =
-			error instanceof Error
-			  ? error.message
-			  : "Unknown error occurred";
-		  set({ loadingState: { isLoading: false, error: errorMessage } });
-		  useNotificationStore.getState().addNotification({
-			type: "error",
-			title: "Error Exporting Schedules",
-			message: errorMessage,
-		  });
-		  throw error;
-		}
-	  },
-
-	exportSchedule: async (scheduleId: string, format: "pdf" | "excel") => {
-		set({ loadingState: { isLoading: true, error: null } });
-		try {
-			const response = await apiClient.get(
-				`/schedules/${scheduleId}/export?format=${format}`,
+			const response = await apiClient.getBlobWithHeaders(
+				`/schedules/export?months=${months.join(
+					","
+				)}&year=${year}&format=${format}`,
 				{
-					responseType: "blob",
+					headers: {
+						Accept:
+							format === "pdf"
+								? "application/pdf"
+								: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+					},
 				}
 			);
-			if (!(response.data instanceof Blob)) {
-				throw new Error("Response data is not a Blob");
+
+			// Extract filename from content-disposition header
+			const contentDisposition = response.headers["content-disposition"];
+			let fileName = `schedules-${year}-${months.join("_")}.${format}`; // fallback
+
+			if (contentDisposition) {
+				const filenameMatch =
+					contentDisposition.match(/filename="(.+)"/);
+				if (filenameMatch && filenameMatch[1]) {
+					fileName = filenameMatch[1];
+				}
 			}
-			const url = window.URL.createObjectURL(response.data);
+
+			// Convert ArrayBuffer to Blob
+			const blob = new Blob([response.data], {
+				type:
+					response.headers["content-type"] ||
+					(format === "pdf"
+						? "application/pdf"
+						: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+			});
+
+			// Create download link
+			const url = window.URL.createObjectURL(blob);
 			const link = document.createElement("a");
 			link.href = url;
-			link.setAttribute("download", `schedule-${scheduleId}.${format}`);
+
+			// Set filename based on the format
+			link.setAttribute("download", fileName);
+
+			// Trigger download
 			document.body.appendChild(link);
 			link.click();
 			document.body.removeChild(link);
 			window.URL.revokeObjectURL(url);
+
 			set({ loadingState: { isLoading: false, error: null } });
 			useNotificationStore.getState().addNotification({
 				type: "success",
-				title: "Schedule Exported",
-				message: `Successfully exported schedule ${scheduleId} as ${format}`,
+				title: "Schedules Exported",
+				message: `Successfully exported schedules for ${months.join(
+					", "
+				)}/${year} as ${format}`,
 			});
 		} catch (error) {
-			const errorMessage =
-				error instanceof Error
-					? error.message
-					: "Unknown error occurred";
-			set({ loadingState: { isLoading: false, error: errorMessage } });
+			const apiError = error as ApiError;
+
+			set({
+				loadingState: { isLoading: false, error: apiError.message },
+			});
 			useNotificationStore.getState().addNotification({
 				type: "error",
-				title: "Error Exporting Schedule",
-				message: errorMessage,
+				title: "Error Exporting Schedules",
+				message: apiError.message,
 			});
-			throw error;
 		}
 	},
 
