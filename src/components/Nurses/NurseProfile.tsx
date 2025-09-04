@@ -1,5 +1,6 @@
 import React from 'react';
 import { Mail, Phone, Calendar, Clock, TrendingUp, AlertCircle } from 'lucide-react';
+import { format, isToday, isFuture, isPast, parseISO } from 'date-fns';
 import { Nurse, WorkloadData as Workload } from '../../types';
 import { useScheduleStore } from '../../stores/scheduleStore';
 
@@ -10,15 +11,31 @@ interface NurseProfileProps {
 export const NurseProfile: React.FC<NurseProfileProps> = ({ nurse }) => {
   const { shifts, workloadData: workloads } = useScheduleStore();
   
-  // Filter shifts for this nurse
+  // Filter shifts for this nurse and ensure date is Date object
   const nurseShifts = shifts.filter(shift => 
     shift.assignedNurses.includes(nurse.id)
-  );
+  ).map(shift => ({
+    ...shift,
+    date: new Date(shift.date) // Convert string to Date object
+  }));
   
+  // Sort shifts: upcoming first (future dates), then past dates
+  const sortedShifts = [...nurseShifts].sort((a, b) => {
+    // Future dates first (most recent future first)
+    if (isFuture(a.date) && isFuture(b.date)) {
+      return a.date.getTime() - b.date.getTime(); // Ascending order for future dates
+    }
+    if (isFuture(a.date)) return -1;
+    if (isFuture(b.date)) return 1;
+    
+    // Past dates last (most recent past first)
+    return b.date.getTime() - a.date.getTime(); // Descending order for past dates
+  });
+
   // Get workload data for this nurse
   const nurseWorkload = workloads.find(w => 
     w.nurseId === nurse.id && 
-    w.month === new Date().getMonth() && 
+    w.month === new Date().getMonth() + 1 && // Months are 1-12 in your backend
     w.year === new Date().getFullYear()
   );
 
@@ -38,14 +55,37 @@ export const NurseProfile: React.FC<NurseProfileProps> = ({ nurse }) => {
     }, 0);
 
     const nightShifts = nurseShifts.filter(shift => shift.type === 'Night').length;
-    const weekendShifts = nurseShifts.filter(shift => 
-      shift.date.getDay() === 0 || shift.date.getDay() === 6
-    ).length;
+    const weekendShifts = nurseShifts.filter(shift => {
+      const dayOfWeek = shift.date.getDay(); // Now this will work
+      return dayOfWeek === 0 || dayOfWeek === 6; // Sunday (0) or Saturday (6)
+    }).length;
 
     return { totalHours, nightShifts, weekendShifts };
   };
 
   const shiftStats = getShiftStats();
+
+  // Get shift status color
+  const getShiftStatusColor = (date: Date) => {
+    if (isToday(date)) {
+      return 'bg-green-50 border-green-200'; // Today - green
+    } else if (isFuture(date)) {
+      return 'bg-yellow-50 border-yellow-200'; // Future - yellow
+    } else {
+      return 'bg-red-50 border-red-200'; // Past - red
+    }
+  };
+
+  // Get shift status text
+  const getShiftStatusText = (date: Date) => {
+    if (isToday(date)) {
+      return 'Today';
+    } else if (isFuture(date)) {
+      return 'Upcoming';
+    } else {
+      return 'Past';
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -98,7 +138,7 @@ export const NurseProfile: React.FC<NurseProfileProps> = ({ nurse }) => {
             <div className="flex items-center gap-4 text-sm text-gray-600">
               <span>Max Hours: {nurse.maxHoursPerWeek}h/week</span>
               <span>•</span>
-              <span>Preferred Shift: {nurse.preferredShifts || 'Any'}</span>
+              <span>Preferred Shift: {nurse.preferredShifts.join(', ') || 'Any'}</span>
             </div>
           </div>
         </div>
@@ -208,32 +248,51 @@ export const NurseProfile: React.FC<NurseProfileProps> = ({ nurse }) => {
 
       {/* Upcoming Shifts */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Shifts</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Shifts</h3>
         
-        {nurseShifts.length === 0 ? (
+        {sortedShifts.length === 0 ? (
           <div className="text-center py-8">
             <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">No upcoming shifts</p>
+            <p className="text-gray-500">No shifts scheduled</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {nurseShifts.slice(0, 5).map(shift => (
-              <div key={shift.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-900">
-                    {shift.date.toLocaleDateString()} • {shift.type} Shift
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {shift.startTime} - {shift.endTime} • {shift.department}
-                  </p>
+            {sortedShifts.slice(0, 10).map(shift => {
+              const statusColor = getShiftStatusColor(shift.date);
+              const statusText = getShiftStatusText(shift.date);
+              
+              return (
+                <div 
+                  key={shift.id} 
+                  className={`flex items-center justify-between p-4 rounded-lg border-2 ${statusColor}`}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <p className="font-medium text-gray-900">
+                        {format(shift.date, 'dd/MM/yyyy')} • {shift.type} Shift
+                      </p>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        isToday(shift.date) 
+                          ? 'bg-green-100 text-green-800' 
+                          : isFuture(shift.date)
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {statusText}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      {shift.startTime} - {shift.endTime} • {shift.department}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-900">
+                      {shift.assignedNurses.length}/{shift.requiredStaff} staffed
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">
-                    {shift.assignedNurses.length}/{shift.requiredStaff} staffed
-                  </p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

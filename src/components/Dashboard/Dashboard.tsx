@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
-import { Users, Calendar, Clock, AlertTriangle, TrendingUp, CheckCircle } from 'lucide-react';
+import { Users, Calendar, Clock, AlertTriangle, TrendingUp, CheckCircle, Info } from 'lucide-react';
 import { useNurseStore } from '../../stores/nurseStore';
 import { useScheduleStore } from '../../stores/scheduleStore';
 import { LoadingSpinner } from '../Common/LoadingSpinner';
+import { isToday, parseISO, format } from 'date-fns';
 
 const StatCard: React.FC<{
   title: string;
@@ -47,6 +48,17 @@ export const Dashboard: React.FC = () => {
 
   const isLoading = nursesLoading.isLoading || scheduleLoading.isLoading;
 
+  // Filter shifts for today only and ensure date is Date object
+  const todaysShifts = shifts
+    .filter(shift => {
+      const shiftDate = new Date(shift.date);
+      return isToday(shiftDate);
+    })
+    .map(shift => ({
+      ...shift,
+      date: new Date(shift.date) // Convert string to Date object
+    }));
+
   const stats = [
     {
       title: 'Total Nurses',
@@ -56,8 +68,8 @@ export const Dashboard: React.FC = () => {
       change: '+2 this month',
     },
     {
-      title: 'Active Shifts',
-      value: shifts.length,
+      title: "Today's Shifts",
+      value: todaysShifts.length,
       icon: Calendar,
       color: 'bg-gradient-to-r from-indigo-500 to-indigo-600',
     },
@@ -69,10 +81,9 @@ export const Dashboard: React.FC = () => {
     },
     {
       title: 'Coverage Rate',
-      value: '94%',
+      value: `${Math.round((todaysShifts.filter(shift => shift.assignedNurses.length >= shift.requiredStaff).length / Math.max(1, todaysShifts.length)) * 100)}%`,
       icon: CheckCircle,
       color: 'bg-gradient-to-r from-green-500 to-green-600',
-      change: '+3% from last month',
     },
   ];
 
@@ -138,7 +149,7 @@ export const Dashboard: React.FC = () => {
                       </span>
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {request.createdAt.toLocaleDateString()} • {request.status}
+                      {new Date(request.createdAt).toLocaleDateString()} • {request.status}
                     </p>
                   </div>
                 </div>
@@ -147,40 +158,56 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Schedule Preview */}
+        {/* Today's Schedule */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Today's Schedule</h3>
-          <div className="space-y-3">
-            {shifts.slice(0, 4).map((shift) => {
-              const assignedNurses = shift.assignedNurses.map(nurseId => 
-                nurses.find(n => n.id === nurseId)
-              ).filter(Boolean);
-              
-              return (
-                <div key={shift.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {shift.department} - {shift.type} Shift
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {shift.startTime} - {shift.endTime}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">
-                      {shift.assignedNurses.length}/{shift.requiredStaff} staffed
-                    </p>
-                    {shift.assignedNurses.length < shift.requiredStaff && (
-                      <p className="text-xs text-red-600 flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        Understaffed
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Today's Schedule</h3>
+            <span className="text-sm text-gray-500">
+              {format(new Date(), 'EEEE, MMMM d')}
+            </span>
           </div>
+          
+          {todaysShifts.length === 0 ? (
+            <div className="text-center py-8 bg-gray-50 rounded-lg">
+              <Info className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 font-medium">No shifts scheduled for today</p>
+              <p className="text-sm text-gray-500 mt-1">
+                All nurses are off duty or no shifts are planned
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {todaysShifts.map((shift) => {
+                const assignedNurses = shift.assignedNurses.map(nurseId => 
+                  nurses.find(n => n.id === nurseId)
+                ).filter(Boolean);
+                
+                return (
+                  <div key={shift.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {shift.department} - {shift.type} Shift
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {shift.startTime} - {shift.endTime}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-900">
+                        {shift.assignedNurses.length}/{shift.requiredStaff} staffed
+                      </p>
+                      {shift.assignedNurses.length < shift.requiredStaff && (
+                        <p className="text-xs text-red-600 flex items-center gap-1 justify-end">
+                          <AlertTriangle className="h-3 w-3" />
+                          Understaffed
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
