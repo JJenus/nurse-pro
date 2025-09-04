@@ -45,6 +45,11 @@ interface ScheduleStore {
 		scheduleId: string,
 		format: "pdf" | "excel"
 	) => Promise<void>;
+	exportSchedules: (
+		months: number[],
+		year: number,
+		format: "pdf" | "excel"
+	)=> Promise<void>;
 	detectConflicts: (scheduleId: string) => Promise<void>;
 	setCurrentSchedule: (schedule: Schedule | null) => void;
 	setLoading: (isLoading: boolean) => void;
@@ -398,53 +403,70 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 		months: number[],
 		year: number,
 		format: "pdf" | "excel"
-	) => {
+	  ) => {
 		set({ loadingState: { isLoading: true, error: null } });
 		try {
-			const response = await apiClient.get(
-				`/schedules/export?months=${months.join(
-					","
-				)}&year=${year}&format=${format}`,
-				{
-					responseType: "blob",
-				}
-			);
-			if (!(response.data instanceof Blob)) {
-				throw new Error("Response data is not a Blob");
+		  const response = await apiClient.get<any>(
+			`/schedules/export?months=${months.join(",")}&year=${year}&format=${format}`,
+			{
+			  responseType: "blob",
 			}
-			const url = window.URL.createObjectURL(response.data);
-			const link = document.createElement("a");
-			link.href = url;
-			link.setAttribute(
-				"download",
-				`schedules-${year}-${months.join("_")}.${format}`
-			);
-			document.body.appendChild(link);
-			link.click();
-			document.body.removeChild(link);
-			window.URL.revokeObjectURL(url);
-			set({ loadingState: { isLoading: false, error: null } });
-			useNotificationStore.getState().addNotification({
-				type: "success",
-				title: "Schedules Exported",
-				message: `Successfully exported schedules for ${months.join(
-					", "
-				)}/${year} as ${format}`,
+		  );
+		  
+		  // Handle different response structures
+		  let blobData;
+		  if (response.data instanceof Blob) {
+			blobData = response.data;
+		  } else if (response.data?.data instanceof Blob) {
+			// If the blob is nested in a data property
+			blobData = response.data.data;
+		  } else if (response.data instanceof ArrayBuffer) {
+			// Convert ArrayBuffer to Blob
+			blobData = new Blob([response.data], { 
+			  type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
 			});
+		  } else {
+			// Try to create blob from whatever data we received
+			const data = response.data || response;
+			blobData = new Blob([JSON.stringify(data)], { type: 'application/octet-stream' });
+		  }
+	  
+		  if (!(blobData instanceof Blob)) {
+			throw new Error("Failed to create blob from response data");
+		  }
+	  
+		  const url = window.URL.createObjectURL(blobData);
+		  const link = document.createElement("a");
+		  link.href = url;
+		  link.setAttribute(
+			"download",
+			`schedules-${year}-${months.join("_")}.${format}`
+		  );
+		  document.body.appendChild(link);
+		  link.click();
+		  document.body.removeChild(link);
+		  window.URL.revokeObjectURL(url);
+		  
+		  set({ loadingState: { isLoading: false, error: null } });
+		  useNotificationStore.getState().addNotification({
+			type: "success",
+			title: "Schedules Exported",
+			message: `Successfully exported schedules for ${months.join(", ")}/${year} as ${format}`,
+		  });
 		} catch (error) {
-			const errorMessage =
-				error instanceof Error
-					? error.message
-					: "Unknown error occurred";
-			set({ loadingState: { isLoading: false, error: errorMessage } });
-			useNotificationStore.getState().addNotification({
-				type: "error",
-				title: "Error Exporting Schedules",
-				message: errorMessage,
-			});
-			throw error;
+		  const errorMessage =
+			error instanceof Error
+			  ? error.message
+			  : "Unknown error occurred";
+		  set({ loadingState: { isLoading: false, error: errorMessage } });
+		  useNotificationStore.getState().addNotification({
+			type: "error",
+			title: "Error Exporting Schedules",
+			message: errorMessage,
+		  });
+		  throw error;
 		}
-	},
+	  },
 
 	exportSchedule: async (scheduleId: string, format: "pdf" | "excel") => {
 		set({ loadingState: { isLoading: true, error: null } });

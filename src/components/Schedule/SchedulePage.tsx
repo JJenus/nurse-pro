@@ -16,7 +16,7 @@ interface SchedulePageProps {
 
 export const SchedulePage: React.FC<SchedulePageProps> = ({ onAddShift }) => {
   const { currentView, selectedDate, setCurrentView, setSelectedDate } = useUIStore();
-  const { fetchSchedules, exportSchedule, loadingState } = useScheduleStore();
+  const { fetchSchedules, exportSchedules, loadingState } = useScheduleStore();
   const { nurses } = useNurseStore();
   
   const [showGenerator, setShowGenerator] = useState(false);
@@ -50,9 +50,13 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({ onAddShift }) => {
 
   const handleExport = async (format: 'pdf' | 'excel') => {
     try {
-      await exportSchedule('current', format);
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth() + 1; // getMonth() returns 0-11
+      const currentYear = currentDate.getFullYear();
+      
+      await exportSchedules([currentMonth], currentYear, format);
     } catch (error) {
-      // Error handled in store
+      console.log(error)
     }
   };
 
