@@ -9,7 +9,7 @@ class ApiClient {
 	constructor() {
 		this.client = axios.create({
 			baseURL:
-				import.meta.env.VITE_API_URL || "https://nursepro.alwaysdata.net/api",
+				import.meta.env.VITE_API_URL || "https://nurse-pro-api.onrender.com/api",
 			timeout: parseInt(import.meta.env.VITE_API_TIMEOUT) || 20000,
 			headers: {
 				"Content-Type": "application/json",
