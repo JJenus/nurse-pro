@@ -4,12 +4,13 @@ import { useNurseStore } from '../../stores/nurseStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { Nurse, FilterOptions } from '../../types';
 import { LoadingSpinner } from '../Common/LoadingSpinner';
+import { ConfirmationModal } from '../Common/ConfirmationModal';
 
 interface NurseCardProps {
   nurse: Nurse;
   onEdit: (nurse: Nurse) => void;
   onView: (nurse: Nurse) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, firstName: string, lastName: string) => void;
 }
 
 const NurseCard: React.FC<NurseCardProps> = ({ nurse, onEdit, onView, onDelete }) => {
@@ -86,7 +87,7 @@ const NurseCard: React.FC<NurseCardProps> = ({ nurse, onEdit, onView, onDelete }
             <Edit className="h-4 w-4" />
           </button>
           <button
-            onClick={() => onDelete(nurse.id)}
+            onClick={() => onDelete(nurse.id, nurse.firstName, nurse.lastName)}
             className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             title="Delete"
           >
@@ -120,27 +121,53 @@ export const NurseList: React.FC<NurseListProps> = ({
   const { addNotification } = useNotificationStore();
 
   const [showFilters, setShowFilters] = useState(false);
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    nurseId: '',
+    nurseName: '',
+  });
 
   useEffect(() => {
     fetchNurses();
   }, [fetchNurses]);
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this nurse?')) {
-      try {
-        await deleteNurse(id);
-        addNotification({
-          type: 'success',
-          title: 'Nurse deleted successfully',
-        });
-      } catch (error) {
-        addNotification({
-          type: 'error',
-          title: 'Failed to delete nurse',
-          message: 'Please try again',
-        });
-      }
+  const handleDeleteClick = (id: string, firstName: string, lastName: string) => {
+    setDeleteModal({
+      isOpen: true,
+      nurseId: id,
+      nurseName: `${firstName} ${lastName}`,
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await deleteNurse(deleteModal.nurseId);
+      addNotification({
+        type: 'success',
+        title: 'Nurse deleted successfully',
+        message: `${deleteModal.nurseName} has been removed from the system`,
+      });
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: 'Failed to delete nurse',
+        message: 'Please try again',
+      });
+    } finally {
+      setDeleteModal({
+        isOpen: false,
+        nurseId: '',
+        nurseName: '',
+      });
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModal({
+      isOpen: false,
+      nurseId: '',
+      nurseName: '',
+    });
   };
 
   // Filter nurses based on current filters
@@ -161,7 +188,7 @@ export const NurseList: React.FC<NurseListProps> = ({
   const departments = [...new Set(nurses.map(n => n.department))];
   const specializations = [...new Set(nurses.flatMap(n => n.specializations))];
 
-  if (loadingState.isLoading) {
+  if (loadingState.isLoading && nurses.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -277,11 +304,23 @@ export const NurseList: React.FC<NurseListProps> = ({
               nurse={nurse}
               onEdit={onEditNurse}
               onView={onViewNurse}
-              onDelete={handleDelete}
+              onDelete={handleDeleteClick}
             />
           ))}
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Nurse"
+        message={`Are you sure you want to delete ${deleteModal.nurseName}? This action cannot be undone.`}
+        confirmText="Delete Nurse"
+        variant="danger"
+        isLoading={loadingState.isLoading}
+      />
     </div>
   );
 };

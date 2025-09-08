@@ -12,10 +12,11 @@ import { LoadingSpinner } from '../Common/LoadingSpinner';
 const schema = yup.object({
   month: yup.number().min(1).max(12).required('Month is required'),
   year: yup.number().min(2024).max(2030).required('Year is required'),
-  minStaffPerShift: yup.number().min(1).max(20).required('Minimum staff per shift is required'),
+  minNursesPerShift: yup.number().min(1).max(20).required('Minimum nurses per shift is required'),
+  maxNursesPerShift: yup.number().min(1).max(20).required('Maximum nurses per shift is required'),
   maxConsecutiveShifts: yup.number().min(1).max(7).required('Maximum consecutive shifts is required'),
-  minRestHours: yup.number().min(8).max(48).required('Minimum rest hours is required'),
-  maxOvertimeHours: yup.number().min(0).max(20).required('Maximum overtime hours is required'),
+  maxConsecutiveDay: yup.number().min(1).max(7).required('Maximum consecutive day shifts is required'),
+  maxConsecutiveNight: yup.number().min(1).max(7).required('Maximum consecutive night shifts is required'),
 });
 
 type FormData = yup.InferType<typeof schema>;
@@ -75,10 +76,11 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
     defaultValues: {
       month: new Date().getMonth() + 1,
       year: new Date().getFullYear(),
-      minStaffPerShift: 2,
+      minNursesPerShift: 2,
+      maxNursesPerShift: 3,
       maxConsecutiveShifts: 3,
-      minRestHours: 12,
-      maxOvertimeHours: 8,
+      maxConsecutiveDay: 3,
+      maxConsecutiveNight: 3,
     },
   });
 
@@ -102,10 +104,11 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
       year: data.year,
       rules: rules.filter(rule => rule.enabled),
       constraints: {
-        minStaffPerShift: { default: data.minStaffPerShift },
         maxConsecutiveShifts: data.maxConsecutiveShifts,
-        minRestHours: data.minRestHours,
-        maxOvertimeHours: data.maxOvertimeHours,
+        minNursesPerShift: data.minNursesPerShift,
+        maxNursesPerShift: data.maxNursesPerShift,
+        maxConsecutiveDay: data.maxConsecutiveDay,
+        maxConsecutiveNight: data.maxConsecutiveNight,
       },
     };
 
@@ -223,17 +226,33 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Minimum Staff Per Shift *
+                      Minimum Nurses Per Shift *
                     </label>
                     <input
-                      {...register('minStaffPerShift', { valueAsNumber: true })}
+                      {...register('minNursesPerShift', { valueAsNumber: true })}
                       type="number"
                       min="1"
                       max="20"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
-                    {errors.minStaffPerShift && (
-                      <p className="mt-1 text-sm text-red-600">{errors.minStaffPerShift.message}</p>
+                    {errors.minNursesPerShift && (
+                      <p className="mt-1 text-sm text-red-600">{errors.minNursesPerShift.message}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Maximum Nurses Per Shift *
+                    </label>
+                    <input
+                      {...register('maxNursesPerShift', { valueAsNumber: true })}
+                      type="number"
+                      min="1"
+                      max="20"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    {errors.maxNursesPerShift && (
+                      <p className="mt-1 text-sm text-red-600">{errors.maxNursesPerShift.message}</p>
                     )}
                   </div>
 
@@ -255,33 +274,33 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Minimum Rest Hours *
+                      Max Consecutive Day Shifts *
                     </label>
                     <input
-                      {...register('minRestHours', { valueAsNumber: true })}
+                      {...register('maxConsecutiveDay', { valueAsNumber: true })}
                       type="number"
-                      min="8"
-                      max="48"
+                      min="1"
+                      max="7"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
-                    {errors.minRestHours && (
-                      <p className="mt-1 text-sm text-red-600">{errors.minRestHours.message}</p>
+                    {errors.maxConsecutiveDay && (
+                      <p className="mt-1 text-sm text-red-600">{errors.maxConsecutiveDay.message}</p>
                     )}
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Max Overtime Hours *
+                      Max Consecutive Night Shifts *
                     </label>
                     <input
-                      {...register('maxOvertimeHours', { valueAsNumber: true })}
+                      {...register('maxConsecutiveNight', { valueAsNumber: true })}
                       type="number"
-                      min="0"
-                      max="20"
+                      min="1"
+                      max="7"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
-                    {errors.maxOvertimeHours && (
-                      <p className="mt-1 text-sm text-red-600">{errors.maxOvertimeHours.message}</p>
+                    {errors.maxConsecutiveNight && (
+                      <p className="mt-1 text-sm text-red-600">{errors.maxConsecutiveNight.message}</p>
                     )}
                   </div>
                 </div>
