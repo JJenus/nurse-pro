@@ -120,9 +120,14 @@ export const SwapRequestList: React.FC = () => {
     swapRequests, 
     approveSwapRequest, 
     rejectSwapRequest, 
+    fetchSwapRequests,
     loadingState 
   } = useScheduleStore();
   const { nurses } = useNurseStore();
+
+  useEffect(() => {
+    fetchSwapRequests();
+  }, [fetchSwapRequests]);
   const { addNotification } = useNotificationStore();
   
   const [filters, setFilters] = useState<SwapRequestFilters>({

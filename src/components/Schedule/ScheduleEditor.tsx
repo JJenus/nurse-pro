@@ -155,11 +155,10 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
   onShiftEdit,
   onShiftAdd,
 }) => {
-  const { shifts, updateShift, loadingState } = useScheduleStore();
+  const { shifts, conflicts: storedConflicts, updateShift, loadingState } = useScheduleStore();
   const { nurses, loadingState: nursesLoading } = useNurseStore();
   const { addNotification } = useNotificationStore();
   
-  const [conflicts, setConflicts] = useState<ScheduleConflict[]>([]);
   const [availableNurses, setAvailableNurses] = useState<Nurse[]>([]);
 
   // Memoize the day shifts to prevent unnecessary recalculations
@@ -167,26 +166,14 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
     return shifts.filter(shift => isSameDay(new Date(shift.date), selectedDate));
   }, [shifts, selectedDate]);
 
-  // Calculate conflicts and available nurses
+  // Conflicts come from the server (the single source of truth for the scheduling rules)
+  const conflicts: ScheduleConflict[] = useMemo(() => {
+    const dayShiftIds = new Set(dayShifts.map(shift => shift.id));
+    return storedConflicts.filter(conflict => dayShiftIds.has(conflict.shiftId));
+  }, [dayShifts, storedConflicts]);
+
+  // Calculate available nurses
   useEffect(() => {
-    // Mock conflict detection
-    const mockConflicts: ScheduleConflict[] = dayShifts
-      .filter(shift => shift.assignedNurses.length < shift.requiredStaff)
-      .map(shift => ({
-        id: `conflict-${shift.id}`,
-        type: 'understaffed',
-        severity: 'high',
-        shiftId: shift.id,
-        message: `${shift.department} ${shift.type} shift is understaffed`,
-        suggestions: [
-          'Consider moving nurses from overstaffed shifts',
-          'Check for available nurses with matching qualifications',
-          'Review overtime policies for additional coverage',
-        ],
-      }));
-
-    setConflicts(mockConflicts);
-
     // Set available nurses (those not assigned to any shift on this date)
     const assignedNurseIds = new Set(dayShifts.flatMap(shift => shift.assignedNurses));
     const available = nurses.filter(nurse => !assignedNurseIds.has(nurse.id));

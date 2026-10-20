@@ -38,13 +38,15 @@ export const Dashboard: React.FC = () => {
     shifts, 
     swapRequests, 
     fetchSchedules,
+    fetchSwapRequests,
     loadingState: scheduleLoading 
   } = useScheduleStore();
 
   useEffect(() => {
     fetchNurses();
     fetchSchedules();
-  }, [fetchNurses, fetchSchedules]);
+    fetchSwapRequests();
+  }, [fetchNurses, fetchSchedules, fetchSwapRequests]);
 
   const isLoading = nursesLoading.isLoading || scheduleLoading.isLoading;
 

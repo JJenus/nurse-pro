@@ -121,10 +121,11 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
       });
       onClose();
     } catch (error) {
+      const apiError = error as { message?: string; code?: string };
       addNotification({
         type: 'error',
-        title: 'Failed to generate schedule',
-        message: 'Please check your configuration and try again',
+        title: apiError?.code === 'CONFLICT' ? 'Schedule already exists' : 'Failed to generate schedule',
+        message: apiError?.message || 'Please check your configuration and try again',
       });
       setStep('config');
     }

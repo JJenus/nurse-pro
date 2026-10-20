@@ -47,14 +47,17 @@ class ApiClient {
 				}
 
 				// Retry logic for network errors
+				// Only idempotent requests are retried: replaying a POST/PUT could create a duplicate.
+				const method = (originalRequest?.method || "get").toLowerCase();
+				const isSafeToRetry = ["get", "head", "options"].includes(method);
+				const retryCount = originalRequest?._retryCount || 0;
 				if (
-					!originalRequest._retry &&
-					originalRequest._retryCount < this.maxRetries &&
+					originalRequest &&
+					isSafeToRetry &&
+					retryCount < this.maxRetries &&
 					(error.code === "NETWORK_ERROR" || !error.response)
 				) {
-					originalRequest._retry = true;
-					originalRequest._retryCount =
-						(originalRequest._retryCount || 0) + 1;
+					originalRequest._retryCount = retryCount + 1;
 
 					await this.delay(
 						this.retryDelay * originalRequest._retryCount

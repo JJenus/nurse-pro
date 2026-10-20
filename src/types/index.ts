@@ -16,7 +16,11 @@ export interface Nurse {
 
 export interface Shift {
 	id: string;
-	date: Date;
+	scheduleId?: string;
+	/** Optimistic-locking version; send it back on update so stale edits are rejected (409). */
+	version?: number;
+	/** ISO calendar date (yyyy-MM-dd) as returned by the API. */
+	date: string;
 	startTime: string;
 	endTime: string;
 	type: "Day" | "Evening" | "Night";
@@ -31,8 +35,35 @@ export interface Schedule {
 	month: number;
 	year: number;
 	shifts: Shift[];
-	generatedAt: Date;
+	generatedAt: string;
+	version?: number;
 	status: "Draft" | "Published" | "Archived";
+}
+
+/** Body of POST /schedules/shifts and PUT /schedules/shifts/{id}. */
+export interface ShiftInput {
+	scheduleId?: string;
+	date: string | Date;
+	startTime: string;
+	endTime: string;
+	type: "Day" | "Evening" | "Night";
+	department: string;
+	requiredStaff: number;
+	assignedNurses: string[];
+	requirements?: (string | undefined)[];
+	version?: number;
+}
+
+export interface ScheduleFilters {
+	month?: number;
+	year?: number;
+	status?: Schedule["status"];
+}
+
+export interface ScheduleGenerationResult {
+	schedule: Schedule;
+	conflicts: ScheduleConflict[];
+	stats: WorkloadData[];
 }
 
 export interface SwapRequest {
@@ -105,8 +136,12 @@ export interface ScheduleConflict {
 		| "overstaffed"
 		| "qualification"
 		| "availability"
-		| "overtime";
+		| "overtime"
+		| "overlap";
 	severity: "low" | "medium" | "high" | "critical";
+	scheduleId?: string;
+	date?: string;
+	resolved?: boolean;
 	shiftId: string;
 	nurseId?: string;
 	message: string;
@@ -133,5 +168,8 @@ export interface ScheduleGenerationParams {
 		maxConsecutiveShifts: number;
 		maxConsecutiveDay: number;
 		maxConsecutiveNight: number;
+		minRestHours?: number;
+		maxOvertimeHours?: number;
 	};
+	seed?: number;
 }

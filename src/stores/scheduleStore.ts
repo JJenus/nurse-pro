@@ -2,14 +2,18 @@ import { create } from "zustand";
 import {
 	Schedule,
 	Shift,
+	ShiftInput,
 	SwapRequest,
 	WorkloadData,
 	LoadingState,
 	ApiError,
 	ScheduleGenerationParams,
+	ScheduleGenerationResult,
 	ScheduleConflict,
+	ScheduleFilters,
 } from "../types";
 import { apiClient } from "../utils/api";
+import { toIsoDate } from "../utils/dates";
 import { useNotificationStore } from "./notificationStore";
 
 interface ScheduleStore {
@@ -21,16 +25,28 @@ interface ScheduleStore {
 	conflicts: ScheduleConflict[];
 	loadingState: LoadingState;
 
-	fetchSchedules: () => Promise<void>;
+	fetchSchedules: (filters?: ScheduleFilters) => Promise<void>;
 	fetchSchedule: (id: string) => Promise<void>;
 	generateSchedule: (
 		month: number,
 		year: number,
 		params: ScheduleGenerationParams
 	) => Promise<void>;
-	updateShift: (shiftId: string, updates: Partial<Shift>) => Promise<void>;
-	createShift: (shiftData: Omit<Shift, "id">) => Promise<void>;
+	updateScheduleStatus: (
+		scheduleId: string,
+		status: Schedule["status"]
+	) => Promise<void>;
+	updateShift: (
+		shiftId: string,
+		updates: Partial<ShiftInput>
+	) => Promise<void>;
+	createShift: (shiftData: ShiftInput) => Promise<void>;
 	deleteShift: (shiftId: string) => Promise<void>;
+	previewShift: (
+		shiftData: ShiftInput,
+		shiftId?: string
+	) => Promise<ScheduleConflict[]>;
+	fetchSwapRequests: (status?: SwapRequest["status"]) => Promise<void>;
 	createSwapRequest: (
 		request: Omit<SwapRequest, "id" | "createdAt" | "updatedAt">
 	) => Promise<void>;
@@ -47,11 +63,85 @@ interface ScheduleStore {
 		year: number,
 		format: "pdf" | "excel"
 	) => Promise<void>;
+	/** Loads the stored conflicts of a schedule (read only). */
+	fetchConflicts: (scheduleId: string) => Promise<void>;
+	/** Asks the server to recompute conflicts and workload for a schedule. */
 	detectConflicts: (scheduleId: string) => Promise<void>;
 	setCurrentSchedule: (schedule: Schedule | null) => void;
 	setLoading: (isLoading: boolean) => void;
 	setError: (error: string | null) => void;
 }
+
+const notifyError = (title: string, apiError: ApiError) => {
+	useNotificationStore.getState().addNotification({
+		type: "error",
+		title,
+		message: apiError.message,
+	});
+};
+
+const notifySuccess = (title: string, message: string) => {
+	useNotificationStore.getState().addNotification({
+		type: "success",
+		title,
+		message,
+	});
+};
+
+const upsertSchedule = (schedules: Schedule[], schedule: Schedule) =>
+	schedules.some((s) => s.id === schedule.id)
+		? schedules.map((s) => (s.id === schedule.id ? schedule : s))
+		: [...schedules, schedule];
+
+const allShifts = (schedules: Schedule[]) =>
+	schedules.flatMap((schedule) => schedule.shifts ?? []);
+
+/** Replaces (or appends) one shift inside every list that holds it. */
+const withShift = (
+	state: Pick<ScheduleStore, "shifts" | "schedules" | "currentSchedule">,
+	shift: Shift
+) => {
+	const put = (list: Shift[]) =>
+		list.some((s) => s.id === shift.id)
+			? list.map((s) => (s.id === shift.id ? shift : s))
+			: [...list, shift];
+	const inSchedule = (schedule: Schedule) =>
+		schedule.id === shift.scheduleId
+			? { ...schedule, shifts: put(schedule.shifts ?? []) }
+			: schedule;
+	return {
+		shifts: put(state.shifts),
+		schedules: state.schedules.map(inSchedule),
+		currentSchedule: state.currentSchedule
+			? inSchedule(state.currentSchedule)
+			: null,
+	};
+};
+
+const withoutShift = (
+	state: Pick<ScheduleStore, "shifts" | "schedules" | "currentSchedule">,
+	shiftId: string
+) => {
+	const drop = (schedule: Schedule) => ({
+		...schedule,
+		shifts: (schedule.shifts ?? []).filter((s) => s.id !== shiftId),
+	});
+	return {
+		shifts: state.shifts.filter((s) => s.id !== shiftId),
+		schedules: state.schedules.map(drop),
+		currentSchedule: state.currentSchedule
+			? drop(state.currentSchedule)
+			: null,
+	};
+};
+
+const toShiftBody = (input: ShiftInput) => ({
+	...input,
+	date: toIsoDate(input.date),
+	requirements: (input.requirements ?? []).filter(
+		(r): r is string => typeof r === "string"
+	),
+});
 
 export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 	schedules: [],
@@ -65,33 +155,36 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 		error: null,
 	},
 
-	fetchSchedules: async () => {
+	fetchSchedules: async (filters?: ScheduleFilters) => {
 		set({ loadingState: { isLoading: true, error: null } });
 		try {
-			const response = await apiClient.get<Schedule[]>("/schedules");
-			const flattenedShifts = response.data.flatMap(
-				(schedule) => schedule.shifts
+			const query = new URLSearchParams();
+			if (filters?.month) query.set("month", String(filters.month));
+			if (filters?.year) query.set("year", String(filters.year));
+			if (filters?.status) query.set("status", filters.status);
+			const qs = query.toString();
+
+			const response = await apiClient.get<Schedule[]>(
+				qs ? `/schedules?${qs}` : "/schedules"
 			);
 			set({
 				schedules: response.data,
-				shifts: flattenedShifts,
+				shifts: allShifts(response.data),
 				loadingState: { isLoading: false, error: null },
 			});
-			useNotificationStore.getState().addNotification({
-				type: "success",
-				title: "Schedules Loaded",
-				message: "Successfully fetched all schedules",
-			});
+
+			// Conflicts are stored per schedule; load them for every schedule still being worked on.
+			response.data
+				.filter((schedule) => schedule.status !== "Archived")
+				.forEach((schedule) => {
+					void get().fetchConflicts(schedule.id);
+				});
 		} catch (error) {
 			const apiError = error as ApiError;
 			set({
 				loadingState: { isLoading: false, error: apiError.message },
 			});
-			useNotificationStore.getState().addNotification({
-				type: "error",
-				title: "Error Loading Schedules",
-				message: apiError.message,
-			});
+			notifyError("Error Loading Schedules", apiError);
 		}
 	},
 
@@ -99,26 +192,22 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 		set({ loadingState: { isLoading: true, error: null } });
 		try {
 			const response = await apiClient.get<Schedule>(`/schedules/${id}`);
-			set({
-				currentSchedule: response.data,
-				shifts: response.data.shifts,
-				loadingState: { isLoading: false, error: null },
+			set((state) => {
+				const schedules = upsertSchedule(state.schedules, response.data);
+				return {
+					schedules,
+					currentSchedule: response.data,
+					shifts: allShifts(schedules),
+					loadingState: { isLoading: false, error: null },
+				};
 			});
-			useNotificationStore.getState().addNotification({
-				type: "success",
-				title: "Schedule Loaded",
-				message: `Successfully fetched schedule ${id}`,
-			});
+			void get().fetchConflicts(id);
 		} catch (error) {
 			const apiError = error as ApiError;
 			set({
 				loadingState: { isLoading: false, error: apiError.message },
 			});
-			useNotificationStore.getState().addNotification({
-				type: "error",
-				title: "Error Loading Schedule",
-				message: apiError.message,
-			});
+			notifyError("Error Loading Schedule", apiError);
 		}
 	},
 
@@ -129,110 +218,135 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 	) => {
 		set({ loadingState: { isLoading: true, error: null } });
 		try {
-			const response = await apiClient.post<Schedule>(
+			const response = await apiClient.post<ScheduleGenerationResult>(
 				"/schedules/generate",
 				{ ...params, month, year }
 			);
-			set((state) => ({
-				schedules: [...state.schedules, response.data],
-				currentSchedule: response.data,
-				shifts: response.data.shifts,
-				loadingState: { isLoading: false, error: null },
-			}));
-			useNotificationStore.getState().addNotification({
-				type: "success",
-				title: "Schedule Generated",
-				message: `Successfully generated schedule for ${month}/${year}`,
+			const { schedule, conflicts, stats } = response.data;
+			set((state) => {
+				const schedules = upsertSchedule(state.schedules, schedule);
+				return {
+					schedules,
+					currentSchedule: schedule,
+					shifts: allShifts(schedules),
+					conflicts: [
+						...state.conflicts.filter(
+							(c) => c.scheduleId !== schedule.id
+						),
+						...conflicts,
+					],
+					workloadData: stats,
+					loadingState: { isLoading: false, error: null },
+				};
 			});
+			notifySuccess(
+				"Schedule Generated",
+				`Successfully generated schedule for ${month}/${year}`
+			);
 		} catch (error) {
 			const apiError = error as ApiError;
 			set({
 				loadingState: { isLoading: false, error: apiError.message },
 			});
-			useNotificationStore.getState().addNotification({
-				type: "error",
-				title: "Error Generating Schedule",
-				message: apiError.message,
-			});
+			notifyError("Error Generating Schedule", apiError);
 			throw error;
 		}
 	},
 
-	updateShift: async (shiftId: string, updates: Partial<Shift>) => {
+	updateScheduleStatus: async (scheduleId, status) => {
 		set({ loadingState: { isLoading: true, error: null } });
 		try {
-			const response = await apiClient.put<Shift>(
-				`/schedules/shifts/${shiftId}`,
-				updates
+			const response = await apiClient.put<Schedule>(
+				`/schedules/${scheduleId}/status`,
+				{ status }
 			);
-			set((state) => ({
-				shifts: state.shifts.map((shift) =>
-					shift.id === shiftId ? response.data : shift
-				),
-				currentSchedule: state.currentSchedule
-					? {
-							...state.currentSchedule,
-							shifts: state.currentSchedule.shifts.map((shift) =>
-								shift.id === shiftId ? response.data : shift
-							),
-					  }
-					: null,
-				loadingState: { isLoading: false, error: null },
-			}));
-			useNotificationStore.getState().addNotification({
-				type: "success",
-				title: "Shift Updated",
-				message: `Successfully updated shift ${shiftId}`,
+			set((state) => {
+				const schedules = upsertSchedule(state.schedules, response.data);
+				return {
+					schedules,
+					currentSchedule:
+						state.currentSchedule?.id === scheduleId
+							? response.data
+							: state.currentSchedule,
+					loadingState: { isLoading: false, error: null },
+				};
 			});
+			notifySuccess("Schedule Updated", response.message);
 		} catch (error) {
 			const apiError = error as ApiError;
 			set({
 				loadingState: { isLoading: false, error: apiError.message },
 			});
-			useNotificationStore.getState().addNotification({
-				type: "error",
-				title: "Error Updating Shift",
-				message: apiError.message,
-			});
+			notifyError("Error Updating Schedule", apiError);
 			throw error;
 		}
 	},
 
-	createShift: async (shiftData: Omit<Shift, "id">) => {
+	updateShift: async (shiftId: string, updates: Partial<ShiftInput>) => {
+		set({ loadingState: { isLoading: true, error: null } });
+		try {
+			// The API validates a full shift, so merge the changes into the stored shift first.
+			const existing = get().shifts.find((shift) => shift.id === shiftId);
+			if (!existing) {
+				throw { message: "Shift not found. Reload the schedule and try again." } as ApiError;
+			}
+			const body = toShiftBody({
+				scheduleId: existing.scheduleId,
+				date: existing.date,
+				startTime: existing.startTime,
+				endTime: existing.endTime,
+				type: existing.type,
+				department: existing.department,
+				requiredStaff: existing.requiredStaff,
+				assignedNurses: existing.assignedNurses,
+				requirements: existing.requirements,
+				version: existing.version,
+				...updates,
+			});
+
+			const response = await apiClient.put<Shift>(
+				`/schedules/shifts/${shiftId}`,
+				body
+			);
+			set((state) => ({
+				...withShift(state, response.data),
+				loadingState: { isLoading: false, error: null },
+			}));
+			if (response.data.scheduleId) {
+				await get().fetchConflicts(response.data.scheduleId);
+			}
+			notifySuccess("Shift Updated", `Successfully updated shift ${shiftId}`);
+		} catch (error) {
+			const apiError = error as ApiError;
+			set({
+				loadingState: { isLoading: false, error: apiError.message },
+			});
+			notifyError("Error Updating Shift", apiError);
+			throw error;
+		}
+	},
+
+	createShift: async (shiftData: ShiftInput) => {
 		set({ loadingState: { isLoading: true, error: null } });
 		try {
 			const response = await apiClient.post<Shift>(
 				"/schedules/shifts",
-				shiftData
+				toShiftBody(shiftData)
 			);
 			set((state) => ({
-				shifts: [...state.shifts, response.data],
-				currentSchedule: state.currentSchedule
-					? {
-							...state.currentSchedule,
-							shifts: [
-								...state.currentSchedule.shifts,
-								response.data,
-							],
-					  }
-					: null,
+				...withShift(state, response.data),
 				loadingState: { isLoading: false, error: null },
 			}));
-			useNotificationStore.getState().addNotification({
-				type: "success",
-				title: "Shift Created",
-				message: "Successfully created new shift",
-			});
+			if (response.data.scheduleId) {
+				await get().fetchConflicts(response.data.scheduleId);
+			}
+			notifySuccess("Shift Created", "Successfully created new shift");
 		} catch (error) {
 			const apiError = error as ApiError;
 			set({
 				loadingState: { isLoading: false, error: apiError.message },
 			});
-			useNotificationStore.getState().addNotification({
-				type: "error",
-				title: "Error Creating Shift",
-				message: apiError.message,
-			});
+			notifyError("Error Creating Shift", apiError);
 			throw error;
 		}
 	},
@@ -240,35 +354,48 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 	deleteShift: async (shiftId: string) => {
 		set({ loadingState: { isLoading: true, error: null } });
 		try {
+			const scheduleId = get().shifts.find(
+				(shift) => shift.id === shiftId
+			)?.scheduleId;
 			await apiClient.delete(`/schedules/shifts/${shiftId}`);
 			set((state) => ({
-				shifts: state.shifts.filter((shift) => shift.id !== shiftId),
-				currentSchedule: state.currentSchedule
-					? {
-							...state.currentSchedule,
-							shifts: state.currentSchedule.shifts.filter(
-								(shift) => shift.id !== shiftId
-							),
-					  }
-					: null,
+				...withoutShift(state, shiftId),
+				conflicts: state.conflicts.filter((c) => c.shiftId !== shiftId),
 				loadingState: { isLoading: false, error: null },
 			}));
-			useNotificationStore.getState().addNotification({
-				type: "success",
-				title: "Shift Deleted",
-				message: `Successfully deleted shift ${shiftId}`,
-			});
+			if (scheduleId) {
+				await get().fetchConflicts(scheduleId);
+			}
+			notifySuccess("Shift Deleted", `Successfully deleted shift ${shiftId}`);
 		} catch (error) {
 			const apiError = error as ApiError;
 			set({
 				loadingState: { isLoading: false, error: apiError.message },
 			});
-			useNotificationStore.getState().addNotification({
-				type: "error",
-				title: "Error Deleting Shift",
-				message: apiError.message,
-			});
+			notifyError("Error Deleting Shift", apiError);
 			throw error;
+		}
+	},
+
+	previewShift: async (shiftData: ShiftInput, shiftId?: string) => {
+		const qs = shiftId ? `?shiftId=${encodeURIComponent(shiftId)}` : "";
+		const response = await apiClient.post<ScheduleConflict[]>(
+			`/schedules/shifts/validate${qs}`,
+			toShiftBody(shiftData)
+		);
+		return response.data;
+	},
+
+	fetchSwapRequests: async (status?: SwapRequest["status"]) => {
+		try {
+			const response = await apiClient.get<SwapRequest[]>(
+				status
+					? `/schedules/swap-requests?status=${status}`
+					: "/schedules/swap-requests"
+			);
+			set({ swapRequests: response.data });
+		} catch (error) {
+			notifyError("Error Loading Swap Requests", error as ApiError);
 		}
 	},
 
@@ -378,11 +505,6 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 				workloadData: response.data,
 				loadingState: { isLoading: false, error: null },
 			});
-			useNotificationStore.getState().addNotification({
-				type: "success",
-				title: "Workload Data Loaded",
-				message: `Successfully fetched workload data for ${month}/${year}`,
-			});
 		} catch (error) {
 			const apiError = error as ApiError;
 			set({
@@ -419,7 +541,7 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 
 			// Extract filename from content-disposition header
 			const contentDisposition = response.headers["content-disposition"];
-			let fileName = `schedules-${year}-${months.join("_")}.${format}`; // fallback
+			let fileName = `schedules-${year}-${months.join("_")}.${format === "pdf" ? "pdf" : "xlsx"}`; // fallback
 
 			if (contentDisposition) {
 				const filenameMatch =
@@ -474,31 +596,44 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 		}
 	},
 
-	detectConflicts: async (scheduleId: string) => {
-		set({ loadingState: { isLoading: true, error: null } });
+	fetchConflicts: async (scheduleId: string) => {
 		try {
 			const response = await apiClient.get<ScheduleConflict[]>(
 				`/schedules/${scheduleId}/conflicts`
 			);
-			set({
-				conflicts: response.data,
+			set((state) => ({
+				conflicts: [
+					...state.conflicts.filter((c) => c.scheduleId !== scheduleId),
+					...response.data,
+				],
+			}));
+		} catch (error) {
+			// Conflicts are supplementary; do not interrupt the screen if they fail to load.
+			console.error("Failed to load conflicts", error);
+		}
+	},
+
+	detectConflicts: async (scheduleId: string) => {
+		set({ loadingState: { isLoading: true, error: null } });
+		try {
+			const response = await apiClient.post<ScheduleConflict[]>(
+				`/schedules/${scheduleId}/validate`,
+				{}
+			);
+			set((state) => ({
+				conflicts: [
+					...state.conflicts.filter((c) => c.scheduleId !== scheduleId),
+					...response.data,
+				],
 				loadingState: { isLoading: false, error: null },
-			});
-			useNotificationStore.getState().addNotification({
-				type: "success",
-				title: "Conflicts Detected",
-				message: `Successfully checked conflicts for schedule ${scheduleId}`,
-			});
+			}));
+			notifySuccess("Schedule Checked", response.message);
 		} catch (error) {
 			const apiError = error as ApiError;
 			set({
 				loadingState: { isLoading: false, error: apiError.message },
 			});
-			useNotificationStore.getState().addNotification({
-				type: "error",
-				title: "Error Detecting Conflicts",
-				message: apiError.message,
-			});
+			notifyError("Error Detecting Conflicts", apiError);
 		}
 	},
 
