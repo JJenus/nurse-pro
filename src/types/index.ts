@@ -64,6 +64,8 @@ export interface ScheduleGenerationResult {
 	schedule: Schedule;
 	conflicts: ScheduleConflict[];
 	stats: WorkloadData[];
+	/** Pass back as `seed` in the generation params to reproduce this exact schedule (null on a replayed request). */
+	seed?: number | null;
 }
 
 export interface SwapRequest {
