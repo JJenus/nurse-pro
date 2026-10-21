@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -7,6 +7,7 @@ import { Nurse } from '../../types';
 import { useNurseStore } from '../../stores/nurseStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { LoadingSpinner } from '../Common/LoadingSpinner';
+import { toIsoDate } from '../../utils/dates';
 
 const schema = yup.object({
   firstName: yup.string().required('First name is required'),
@@ -79,12 +80,25 @@ export const NurseForm: React.FC<NurseFormProps> = ({ nurse, onCancel, onSuccess
   const watchedSpecializations = watch('specializations') || [];
   const watchedPreferredShifts = watch('preferredShifts') || [];
 
+  // Days off / leave. Kept as plain yyyy-MM-dd strings so no timezone shifts them by a day.
+  const [unavailableDates, setUnavailableDates] = useState<string[]>(
+    (nurse?.unavailableDates ?? []).map(d => toIsoDate(d)).sort()
+  );
+  const [newUnavailableDate, setNewUnavailableDate] = useState('');
+
+  const addUnavailableDate = () => {
+    if (newUnavailableDate && !unavailableDates.includes(newUnavailableDate)) {
+      setUnavailableDates([...unavailableDates, newUnavailableDate].sort());
+    }
+    setNewUnavailableDate('');
+  };
+
   const onSubmit = async (data: FormData) => {
     try {
       if (isEditing && nurse) {
         await updateNurse(nurse.id, {
           ...data,
-          unavailableDates: nurse.unavailableDates,
+          unavailableDates,
         });
         addNotification({
           type: 'success',
@@ -93,7 +107,7 @@ export const NurseForm: React.FC<NurseFormProps> = ({ nurse, onCancel, onSuccess
       } else {
         await createNurse({
           ...data,
-          unavailableDates: [],
+          unavailableDates,
         });
         addNotification({
           type: 'success',
@@ -317,6 +331,48 @@ export const NurseForm: React.FC<NurseFormProps> = ({ nurse, onCancel, onSuccess
             </div>
             {errors.preferredShifts && (
               <p className="mt-1 text-sm text-red-600">{errors.preferredShifts.message}</p>
+            )}
+          </div>
+
+          {/* Unavailable dates */}
+          <div className="border-t border-gray-200 pt-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Unavailable Dates</h3>
+            <p className="text-sm text-gray-600 mb-3">
+              Days the nurse cannot work (leave, appointments). Schedules are generated around them, and existing
+              schedules are re-checked when they change.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={newUnavailableDate}
+                onChange={e => setNewUnavailableDate(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg"
+              />
+              <button
+                type="button"
+                onClick={addUnavailableDate}
+                disabled={!newUnavailableDate}
+                className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+              >
+                Add date
+              </button>
+            </div>
+            {unavailableDates.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {unavailableDates.map(date => (
+                  <span key={date} className="inline-flex items-center gap-1 px-3 py-1 text-sm bg-amber-50 border border-amber-200 rounded-full">
+                    {new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                    <button
+                      type="button"
+                      onClick={() => setUnavailableDates(unavailableDates.filter(d => d !== date))}
+                      className="text-amber-700 hover:text-amber-900"
+                      aria-label={`Remove ${date}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
             )}
           </div>
 

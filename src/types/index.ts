@@ -9,7 +9,8 @@ export interface Nurse {
 	experienceLevel: "Junior" | "Mid" | "Senior" | "Expert";
 	maxHoursPerWeek: number;
 	preferredShifts: ("Day" | "Evening" | "Night")[];
-	unavailableDates: Date[];
+	/** ISO calendar dates (yyyy-MM-dd) the nurse cannot work. */
+	unavailableDates: string[];
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -139,7 +140,9 @@ export interface ScheduleConflict {
 		| "qualification"
 		| "availability"
 		| "overtime"
-		| "overlap";
+		| "overlap"
+		| "rest"
+		| "consecutive";
 	severity: "low" | "medium" | "high" | "critical";
 	scheduleId?: string;
 	date?: string;
@@ -174,6 +177,8 @@ export interface ScheduleGenerationParams {
 		maxOvertimeHours?: number;
 	};
 	seed?: number;
+	/** Replace the Draft schedule of that month if one already exists. */
+	replaceDraft?: boolean;
 }
 
 export type RescheduleMode = "fill_gaps" | "rebuild_range";

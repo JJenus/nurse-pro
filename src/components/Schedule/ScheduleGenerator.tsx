@@ -17,6 +17,7 @@ const schema = yup.object({
   maxConsecutiveShifts: yup.number().min(1).max(7).required('Maximum consecutive shifts is required'),
   maxConsecutiveDay: yup.number().min(1).max(7).required('Maximum consecutive day shifts is required'),
   maxConsecutiveNight: yup.number().min(1).max(7).required('Maximum consecutive night shifts is required'),
+  replaceDraft: yup.boolean().default(false),
 });
 
 type FormData = yup.InferType<typeof schema>;
@@ -81,6 +82,7 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
       maxConsecutiveShifts: 3,
       maxConsecutiveDay: 3,
       maxConsecutiveNight: 3,
+      replaceDraft: false,
     },
   });
 
@@ -111,6 +113,7 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
       month: data.month,
       year: data.year,
       rules: rules.filter(rule => rule.enabled),
+      replaceDraft: data.replaceDraft,
       constraints: {
         maxConsecutiveShifts: data.maxConsecutiveShifts,
         minNursesPerShift: data.minNursesPerShift,
@@ -227,6 +230,18 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
                     )}
                   </div>
                 </div>
+
+                <label className="mt-4 flex items-start gap-2 text-sm text-gray-700">
+                  <input
+                    {...register('replaceDraft')}
+                    type="checkbox"
+                    className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>
+                    Replace the existing draft for this month, if there is one. Published and archived schedules
+                    are never replaced.
+                  </span>
+                </label>
               </div>
 
               {/* Constraints */}
