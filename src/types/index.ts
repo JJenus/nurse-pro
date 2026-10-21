@@ -175,3 +175,55 @@ export interface ScheduleGenerationParams {
 	};
 	seed?: number;
 }
+
+export type RescheduleMode = "fill_gaps" | "rebuild_range";
+
+export interface RescheduleRequest {
+	fromDate: string | Date;
+	toDate?: string | Date;
+	mode: RescheduleMode;
+	excludeNurseIds: string[];
+	lockedShiftIds?: string[];
+	reason?: string;
+	/** Preview by default; set to false (with revision and seed from the preview) to apply. */
+	dryRun: boolean;
+	revision?: string;
+	seed?: number;
+}
+
+export interface RescheduleShiftChange {
+	/** Null for a shift that does not exist yet. */
+	shiftId: string | null;
+	date: string;
+	type: "Day" | "Evening" | "Night";
+	newShift: boolean;
+	added: string[];
+	removed: string[];
+}
+
+export interface RescheduleResult {
+	applied: boolean;
+	revision: string | null;
+	seed: number;
+	from: string;
+	to: string;
+	shiftsChanged: number;
+	shiftsCreated: number;
+	nursesAdded: number;
+	nursesRemoved: number;
+	unfilledPositions: number;
+	changes: RescheduleShiftChange[];
+	conflicts: ScheduleConflict[];
+}
+
+export interface ScheduleChangeLog {
+	id: string;
+	scheduleId: string;
+	shiftId?: string;
+	nurseId?: string;
+	action: string;
+	actor?: string;
+	reason?: string;
+	details?: string;
+	createdAt: string;
+}

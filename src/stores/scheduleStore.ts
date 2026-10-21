@@ -11,6 +11,9 @@ import {
 	ScheduleGenerationResult,
 	ScheduleConflict,
 	ScheduleFilters,
+	RescheduleRequest,
+	RescheduleResult,
+	ScheduleChangeLog,
 } from "../types";
 import { apiClient } from "../utils/api";
 import { toIsoDate } from "../utils/dates";
@@ -37,6 +40,13 @@ interface ScheduleStore {
 		scheduleId: string,
 		status: Schedule["status"]
 	) => Promise<void>;
+	/** Previews (dryRun) or applies a reschedule of a date range; applying reloads the schedule. */
+	rescheduleSchedule: (
+		scheduleId: string,
+		request: RescheduleRequest
+	) => Promise<RescheduleResult>;
+	/** Audit log of a schedule (read only, newest first). */
+	fetchScheduleChanges: (scheduleId: string) => Promise<ScheduleChangeLog[]>;
 	updateShift: (
 		shiftId: string,
 		updates: Partial<ShiftInput>
@@ -293,6 +303,34 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 			notifyError("Error Updating Schedule", apiError);
 			throw error;
 		}
+	},
+
+	rescheduleSchedule: async (scheduleId, request) => {
+		try {
+			const response = await apiClient.post<RescheduleResult>(
+				`/schedules/${scheduleId}/reschedule`,
+				{
+					...request,
+					fromDate: toIsoDate(request.fromDate),
+					toDate: request.toDate ? toIsoDate(request.toDate) : undefined,
+				}
+			);
+			if (!request.dryRun) {
+				await get().fetchSchedule(scheduleId);
+				notifySuccess("Schedule Rescheduled", response.message);
+			}
+			return response.data;
+		} catch (error) {
+			notifyError("Error Rescheduling", error as ApiError);
+			throw error;
+		}
+	},
+
+	fetchScheduleChanges: async (scheduleId: string) => {
+		const response = await apiClient.get<ScheduleChangeLog[]>(
+			`/schedules/${scheduleId}/changes`
+		);
+		return response.data;
 	},
 
 	updateShift: async (shiftId: string, updates: Partial<ShiftInput>) => {

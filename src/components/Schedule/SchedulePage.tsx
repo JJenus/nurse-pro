@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Fragment } from "react";
-import { Calendar, Table, Wand2, Download, RefreshCw, X } from "lucide-react";
+import { Calendar, Table, Wand2, Download, RefreshCw, X, CalendarClock } from "lucide-react";
 import { useScheduleStore } from "../../stores/scheduleStore";
 import { useUIStore } from "../../stores/uiStore";
 import { useNurseStore } from "../../stores/nurseStore";
@@ -8,6 +8,8 @@ import { ScheduleEditor } from "./ScheduleEditor";
 import { ScheduleGenerator } from "./ScheduleGenerator";
 import { ScheduleTable } from "./ScheduleTable";
 import { ShiftDetailsModal } from "./ShiftDetailsModal";
+import { RescheduleDialog } from "./RescheduleDialog";
+import { ConfirmationModal } from "../Common/ConfirmationModal";
 import { Shift } from "../../types";
 import { Transition, Dialog, TransitionChild, DialogPanel, DialogTitle } from "@headlessui/react";
 
@@ -246,11 +248,22 @@ const ExportModal: React.FC<ExportModalProps> = ({
 export const SchedulePage: React.FC<SchedulePageProps> = ({ onAddShift }) => {
 	const { currentView, selectedDate, setCurrentView, setSelectedDate } =
 		useUIStore();
-	const { fetchSchedules, exportSchedules, loadingState } =
+	const { schedules, fetchSchedules, exportSchedules, updateScheduleStatus, loadingState } =
 		useScheduleStore();
 	const { nurses } = useNurseStore();
 
 	const [showGenerator, setShowGenerator] = useState(false);
+	const [showReschedule, setShowReschedule] = useState(false);
+	const [pendingStatus, setPendingStatus] = useState<"Published" | "Archived" | null>(null);
+
+	// the schedule of the month being looked at
+	const activeSchedule =
+		schedules.find(
+			(s) =>
+				s.month === selectedDate.getMonth() + 1 &&
+				s.year === selectedDate.getFullYear()
+		) ?? null;
+	const canModify = !!activeSchedule && activeSchedule.status !== "Archived";
 	const [showExportModal, setShowExportModal] = useState(false);
 	const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
 	const [showShiftEditor, setShowShiftEditor] = useState(false);
@@ -319,6 +332,39 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({ onAddShift }) => {
 						<Wand2 className="h-4 w-4" />
 						Generate Schedule
 					</button>
+
+					{activeSchedule && (
+						<span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
+							{activeSchedule.status}
+						</span>
+					)}
+
+					{canModify && (
+						<button
+							onClick={() => setShowReschedule(true)}
+							className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+						>
+							<CalendarClock className="h-4 w-4" />
+							Reschedule
+						</button>
+					)}
+
+					{activeSchedule?.status === "Draft" && (
+						<button
+							onClick={() => setPendingStatus("Published")}
+							className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+						>
+							Publish
+						</button>
+					)}
+					{activeSchedule?.status === "Published" && (
+						<button
+							onClick={() => setPendingStatus("Archived")}
+							className="px-3 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+						>
+							Archive
+						</button>
+					)}
 
 					<div className="flex items-center bg-gray-100 rounded-lg p-1">
 						<button
@@ -410,6 +456,40 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({ onAddShift }) => {
 			{/* Schedule Generator Modal */}
 			{showGenerator && (
 				<ScheduleGenerator onClose={() => setShowGenerator(false)} />
+			)}
+
+			{/* Reschedule Dialog */}
+			{activeSchedule && showReschedule && (
+				<RescheduleDialog
+					isOpen={showReschedule}
+					onClose={() => setShowReschedule(false)}
+					schedule={activeSchedule}
+				/>
+			)}
+
+			{/* Publish / Archive confirmation */}
+			{activeSchedule && (
+				<ConfirmationModal
+					isOpen={pendingStatus !== null}
+					onClose={() => setPendingStatus(null)}
+					onConfirm={async () => {
+						if (!pendingStatus) return;
+						try {
+							await updateScheduleStatus(activeSchedule.id, pendingStatus);
+						} finally {
+							setPendingStatus(null);
+						}
+					}}
+					title={pendingStatus === "Archived" ? "Archive schedule?" : "Publish schedule?"}
+					message={
+						pendingStatus === "Archived"
+							? "An archived schedule is read only: shifts can no longer be edited, swapped or rescheduled."
+							: "Publishing marks this schedule as final. Later edits to it are recorded in its history."
+					}
+					confirmText={pendingStatus === "Archived" ? "Archive" : "Publish"}
+					variant={pendingStatus === "Archived" ? "warning" : "info"}
+					isLoading={loadingState.isLoading}
+				/>
 			)}
 
 			{/* Export Modal */}
