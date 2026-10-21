@@ -28,12 +28,14 @@ const SwapRequestCard: React.FC<SwapRequestCardProps> = ({
     Pending: 'bg-yellow-100 text-yellow-800 border-yellow-300',
     Approved: 'bg-green-100 text-green-800 border-green-300',
     Rejected: 'bg-red-100 text-red-800 border-red-300',
+    Cancelled: 'bg-gray-100 text-gray-700 border-gray-300',
   };
 
   const statusIcons = {
     Pending: Clock,
     Approved: CheckCircle,
     Rejected: XCircle,
+    Cancelled: XCircle,
   };
 
   const StatusIcon = statusIcons[request.status];
@@ -253,6 +255,7 @@ export const SwapRequestList: React.FC = () => {
               <option value="Pending">Pending</option>
               <option value="Approved">Approved</option>
               <option value="Rejected">Rejected</option>
+              <option value="Cancelled">Cancelled</option>
             </select>
 
             <select

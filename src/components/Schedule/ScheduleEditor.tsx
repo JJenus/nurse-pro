@@ -155,7 +155,7 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
   onShiftEdit,
   onShiftAdd,
 }) => {
-  const { shifts, conflicts: storedConflicts, updateShift, loadingState } = useScheduleStore();
+  const { shifts, conflicts: storedConflicts, moveNurse, loadingState } = useScheduleStore();
   const { nurses, loadingState: nursesLoading } = useNurseStore();
   const { addNotification } = useNotificationStore();
   
@@ -192,25 +192,12 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
     if (sourceShiftId === destShiftId) return;
 
     try {
-      // Remove from source shift (if not coming from available pool)
-      if (sourceShiftId !== 'available') {
-        const sourceShift = shifts.find(s => s.id === sourceShiftId);
-        if (sourceShift) {
-          await updateShift(sourceShiftId, {
-            assignedNurses: sourceShift.assignedNurses.filter(id => id !== nurseId),
-          });
-        }
-      }
-
-      // Add to destination shift (if not going back to available pool)
-      if (destShiftId !== 'available') {
-        const destShift = shifts.find(s => s.id === destShiftId);
-        if (destShift) {
-          await updateShift(destShiftId, {
-            assignedNurses: [...destShift.assignedNurses, nurseId],
-          });
-        }
-      }
+      // One atomic request: the nurse is never left removed from the source but missing from the destination.
+      await moveNurse(
+        nurseId,
+        sourceShiftId !== 'available' ? sourceShiftId : null,
+        destShiftId !== 'available' ? destShiftId : null,
+      );
 
       addNotification({
         type: 'success',
@@ -223,7 +210,7 @@ export const ScheduleEditor: React.FC<ScheduleEditorProps> = ({
         message: 'Please try again',
       });
     }
-  }, [shifts, updateShift, addNotification]);
+  }, [moveNurse, addNotification]);
 
   // Show loading if nurses or shifts are still loading
   if (loadingState.isLoading || nursesLoading.isLoading) {

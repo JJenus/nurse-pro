@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -84,6 +84,14 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
     },
   });
 
+  // One key per attempt: retrying the same submission replays the first result instead of failing with
+  // "already exists"; changing any field starts a new attempt.
+  const attemptKey = useRef<string>(crypto.randomUUID());
+  const formSignature = JSON.stringify(watch());
+  useEffect(() => {
+    attemptKey.current = crypto.randomUUID();
+  }, [formSignature]);
+
   const toggleRule = (ruleId: string) => {
     setRules(prev => prev.map(rule =>
       rule.id === ruleId ? { ...rule, enabled: !rule.enabled } : rule
@@ -113,7 +121,7 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
     };
 
     try {
-      await generateSchedule(data.month, data.year, params);
+      await generateSchedule(data.month, data.year, params, attemptKey.current);
       addNotification({
         type: 'success',
         title: 'Schedule generated successfully',

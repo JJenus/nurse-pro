@@ -73,7 +73,7 @@ export interface SwapRequest {
 	shiftId: string;
 	targetShiftId?: string;
 	reason: string;
-	status: "Pending" | "Approved" | "Rejected";
+	status: "Pending" | "Approved" | "Rejected" | "Cancelled";
 	createdAt: Date;
 	updatedAt: Date;
 	reviewedBy?: string;

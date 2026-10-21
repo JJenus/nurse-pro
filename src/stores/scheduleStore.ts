@@ -30,7 +30,8 @@ interface ScheduleStore {
 	generateSchedule: (
 		month: number,
 		year: number,
-		params: ScheduleGenerationParams
+		params: ScheduleGenerationParams,
+		idempotencyKey?: string
 	) => Promise<void>;
 	updateScheduleStatus: (
 		scheduleId: string,
@@ -41,6 +42,12 @@ interface ScheduleStore {
 		updates: Partial<ShiftInput>
 	) => Promise<void>;
 	createShift: (shiftData: ShiftInput) => Promise<void>;
+	/** Moves a nurse between shifts in one atomic request (drag and drop). */
+	moveNurse: (
+		nurseId: string,
+		fromShiftId: string | null,
+		toShiftId: string | null
+	) => Promise<void>;
 	deleteShift: (shiftId: string) => Promise<void>;
 	previewShift: (
 		shiftData: ShiftInput,
@@ -51,6 +58,7 @@ interface ScheduleStore {
 		request: Omit<SwapRequest, "id" | "createdAt" | "updatedAt">
 	) => Promise<void>;
 	approveSwapRequest: (requestId: string) => Promise<void>;
+	cancelSwapRequest: (requestId: string) => Promise<void>;
 	rejectSwapRequest: (requestId: string) => Promise<void>;
 	fetchWorkloadData: (
 		nurseId: string,
@@ -214,13 +222,18 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 	generateSchedule: async (
 		month: number,
 		year: number,
-		params: ScheduleGenerationParams
+		params: ScheduleGenerationParams,
+		idempotencyKey?: string
 	) => {
 		set({ loadingState: { isLoading: true, error: null } });
 		try {
 			const response = await apiClient.post<ScheduleGenerationResult>(
 				"/schedules/generate",
-				{ ...params, month, year }
+				{ ...params, month, year },
+				// A retry carrying the same key returns the first result instead of "already exists".
+				idempotencyKey
+					? { headers: { "Idempotency-Key": idempotencyKey } }
+					: undefined
 			);
 			const { schedule, conflicts, stats } = response.data;
 			set((state) => {
@@ -377,6 +390,42 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 		}
 	},
 
+	moveNurse: async (nurseId, fromShiftId, toShiftId) => {
+		set({ loadingState: { isLoading: true, error: null } });
+		try {
+			const response = await apiClient.post<Shift[]>(
+				"/schedules/shifts/move",
+				{ nurseId, fromShiftId, toShiftId }
+			);
+			set((state) => ({
+				...response.data.reduce(
+					(acc, shift) => ({ ...acc, ...withShift(acc, shift) }),
+					{
+						shifts: state.shifts,
+						schedules: state.schedules,
+						currentSchedule: state.currentSchedule,
+					}
+				),
+				loadingState: { isLoading: false, error: null },
+			}));
+			const scheduleIds = new Set(
+				response.data
+					.map((shift) => shift.scheduleId)
+					.filter((id): id is string => !!id)
+			);
+			await Promise.all(
+				[...scheduleIds].map((id) => get().fetchConflicts(id))
+			);
+		} catch (error) {
+			const apiError = error as ApiError;
+			set({
+				loadingState: { isLoading: false, error: apiError.message },
+			});
+			notifyError("Error Updating Assignment", apiError);
+			throw error;
+		}
+	},
+
 	previewShift: async (shiftData: ShiftInput, shiftId?: string) => {
 		const qs = shiftId ? `?shiftId=${encodeURIComponent(shiftId)}` : "";
 		const response = await apiClient.post<ScheduleConflict[]>(
@@ -459,6 +508,30 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 				title: "Error Approving Swap Request",
 				message: apiError.message,
 			});
+			throw error;
+		}
+	},
+
+	cancelSwapRequest: async (requestId: string) => {
+		set({ loadingState: { isLoading: true, error: null } });
+		try {
+			const response = await apiClient.put<SwapRequest>(
+				`/schedules/swap-requests/${requestId}/cancel`,
+				{}
+			);
+			set((state) => ({
+				swapRequests: state.swapRequests.map((request) =>
+					request.id === requestId ? response.data : request
+				),
+				loadingState: { isLoading: false, error: null },
+			}));
+			notifySuccess("Swap Request Cancelled", response.message);
+		} catch (error) {
+			const apiError = error as ApiError;
+			set({
+				loadingState: { isLoading: false, error: apiError.message },
+			});
+			notifyError("Error Cancelling Swap Request", apiError);
 			throw error;
 		}
 	},
