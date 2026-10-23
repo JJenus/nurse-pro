@@ -1,14 +1,8 @@
 # Nurse Schedule Pro Frontend
 
-![Nurse Pro Frontend](https://img.shields.io/badge/Nurse-Pro%20Frontend-blueviolet)
-![React](https://img.shields.io/badge/React-18.x-61dafb)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6)
-![Vite](https://img.shields.io/badge/Vite-5.x-646cff)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.x-38bdf8)
-
 A modern, responsive frontend application for Nurse Schedule Pro - a professional shift management system designed for healthcare organizations.
 
-## 🚀 Features
+## Features
 
 - **Interactive Schedule Management**: Calendar and table views for shift planning
 - **Drag & Drop Scheduling**: Intuitive shift assignment with react-beautiful-dnd
@@ -20,7 +14,7 @@ A modern, responsive frontend application for Nurse Schedule Pro - a professiona
 - **Nurse Profiles**: Comprehensive nurse management
 - **Swap Requests**: Shift exchange system with approval workflow
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Core Technologies
 
@@ -45,7 +39,7 @@ A modern, responsive frontend application for Nurse Schedule Pro - a professiona
 - **jspdf** - PDF generation
 - **PapaParse** - CSV parsing for bulk uploads
 
-## 📦 Project Structure
+## Project Structure
 
 ```
 src/
@@ -88,7 +82,7 @@ src/
 └── main.tsx                    # Application entry point
 ```
 
-## 🎨 UI/UX Features
+## UI/UX Features
 
 ### Design System
 
@@ -110,7 +104,7 @@ src/
 - **Notifications**: Toast notifications for user feedback
 - **Loading States**: Skeleton screens and spinners
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -169,7 +163,7 @@ npm run build
 npm run preview
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -187,7 +181,7 @@ The project uses a custom Tailwind configuration with healthcare-specific colors
 
 Optimized for React and TypeScript with hot module replacement.
 
-## 📱 Key Features in Detail
+## Key Features in Detail
 
 ### Schedule Management
 
@@ -210,7 +204,7 @@ Optimized for React and TypeScript with hot module replacement.
 - **Approval Workflow**: Manager approval system
 - **Notification System**: Real-time updates on request status
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run linting
@@ -223,7 +217,7 @@ npx tsc --noEmit
 npm run build && npm run preview
 ```
 
-## 📊 Performance Optimizations
+## Performance Optimizations
 
 - **Code Splitting**: Automatic chunk splitting with Vite
 - **Tree Shaking**: Unused code elimination
@@ -231,7 +225,7 @@ npm run build && npm run preview
 - **Lazy Loading**: Component and route lazy loading
 - **Memoization**: Optimized re-renders with React memo
 
-## 🌐 Browser Support
+## Browser Support
 
 - Chrome 90+
 - Firefox 88+
@@ -246,17 +240,17 @@ npm run build && npm run preview
 - Prettier for formatting
 - Component-driven development
 
-## 📄 License
+## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-## 🆘 Support
+## Support
 
 - **Documentation**: Component documentation in code
 - **Issues**: GitHub issue tracker
 - **Email**: support@nursepro.com
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Healthcare professionals for feedback and testing
 - Open source community for amazing tools
