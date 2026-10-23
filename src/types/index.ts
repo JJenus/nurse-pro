@@ -179,6 +179,8 @@ export interface ScheduleGenerationParams {
 	seed?: number;
 	/** Replace the Draft schedule of that month if one already exists. */
 	replaceDraft?: boolean;
+	/** Generate and return the schedule without saving anything. */
+	preview?: boolean;
 }
 
 export type RescheduleMode = "fill_gaps" | "rebuild_range";
@@ -231,4 +233,10 @@ export interface ScheduleChangeLog {
 	reason?: string;
 	details?: string;
 	createdAt: string;
+}
+
+export interface SwapCheckResult {
+	canApprove: boolean;
+	status: string;
+	problems: string[];
 }

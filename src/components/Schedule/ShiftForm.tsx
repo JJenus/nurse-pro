@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { format } from 'date-fns';
 import { Save, X, Clock, Users, Building } from 'lucide-react';
-import { Shift } from '../../types';
+import { Shift, ShiftInput, ScheduleConflict } from '../../types';
 import { useScheduleStore } from '../../stores/scheduleStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { LoadingSpinner } from '../Common/LoadingSpinner';
@@ -40,7 +40,8 @@ const defaultShiftTimes = {
 };
 
 export const ShiftForm: React.FC<ShiftFormProps> = ({ shift, date, onCancel, onSuccess }) => {
-  const { createShift, updateShift, loadingState } = useScheduleStore();
+  const { createShift, updateShift, previewShift, loadingState } = useScheduleStore();
+  const [conflictPreview, setConflictPreview] = useState<ScheduleConflict[] | null>(null);
   const { addNotification } = useNotificationStore();
   const isEditing = !!shift;
 
@@ -89,6 +90,19 @@ export const ShiftForm: React.FC<ShiftFormProps> = ({ shift, date, onCancel, onS
       setValue('requirements', [...current, requirement]);
     }
   };
+
+  // Asks the server what conflicts saving this shift would cause, without saving it.
+  const checkConflicts = handleSubmit(async (data) => {
+    try {
+      const conflicts = await previewShift(
+        { ...data, date, assignedNurses: shift?.assignedNurses || [] } as unknown as ShiftInput,
+        shift?.id
+      );
+      setConflictPreview(conflicts);
+    } catch {
+      setConflictPreview(null);
+    }
+  });
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -251,6 +265,24 @@ export const ShiftForm: React.FC<ShiftFormProps> = ({ shift, date, onCancel, onS
             </div>
           </div>
 
+          {/* Conflict check */}
+          {conflictPreview && (
+            <div className={`rounded-lg border p-4 ${conflictPreview.length ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+              {conflictPreview.length === 0 ? (
+                <p className="text-sm text-green-800">No conflicts: this shift can be saved as it is.</p>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-amber-900 mb-2">
+                    Saving this shift would cause {conflictPreview.length} conflict(s):
+                  </p>
+                  <ul className="list-disc pl-5 text-sm text-amber-900 space-y-1">
+                    {conflictPreview.map((c, i) => <li key={i}>{c.message}</li>)}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Form Actions */}
           <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-200">
             <button
@@ -260,6 +292,14 @@ export const ShiftForm: React.FC<ShiftFormProps> = ({ shift, date, onCancel, onS
               disabled={loadingState.isLoading}
             >
               Cancel
+            </button>
+            <button
+              type="button"
+              onClick={checkConflicts}
+              disabled={loadingState.isLoading}
+              className="px-4 py-2 text-blue-700 border border-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+            >
+              Check for conflicts
             </button>
             <button
               type="submit"

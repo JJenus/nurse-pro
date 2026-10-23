@@ -14,6 +14,7 @@ import {
 	RescheduleRequest,
 	RescheduleResult,
 	ScheduleChangeLog,
+	SwapCheckResult,
 } from "../types";
 import { apiClient } from "../utils/api";
 import { toIsoDate } from "../utils/dates";
@@ -45,6 +46,12 @@ interface ScheduleStore {
 		scheduleId: string,
 		request: RescheduleRequest
 	) => Promise<RescheduleResult>;
+	/** Generates a schedule without saving it, so it can be reviewed first (nothing in the store changes). */
+	previewSchedule: (
+		params: ScheduleGenerationParams
+	) => Promise<ScheduleGenerationResult>;
+	/** Whether a pending swap could be approved right now, and why not. */
+	checkSwapRequest: (requestId: string) => Promise<SwapCheckResult>;
 	/** Audit log of a schedule (read only, newest first). */
 	fetchScheduleChanges: (scheduleId: string) => Promise<ScheduleChangeLog[]>;
 	updateShift: (
@@ -324,6 +331,26 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 			notifyError("Error Rescheduling", error as ApiError);
 			throw error;
 		}
+	},
+
+	previewSchedule: async (params) => {
+		try {
+			const response = await apiClient.post<ScheduleGenerationResult>(
+				"/schedules/generate",
+				{ ...params, preview: true }
+			);
+			return response.data;
+		} catch (error) {
+			notifyError("Error Previewing Schedule", error as ApiError);
+			throw error;
+		}
+	},
+
+	checkSwapRequest: async (requestId: string) => {
+		const response = await apiClient.get<SwapCheckResult>(
+			`/schedules/swap-requests/${requestId}/check`
+		);
+		return response.data;
 	},
 
 	fetchScheduleChanges: async (scheduleId: string) => {

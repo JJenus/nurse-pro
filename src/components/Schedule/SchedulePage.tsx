@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Fragment } from "react";
-import { Calendar, Table, Wand2, Download, RefreshCw, X, CalendarClock } from "lucide-react";
+import { Calendar, Table, Wand2, Download, RefreshCw, X, CalendarClock, History } from "lucide-react";
 import { useScheduleStore } from "../../stores/scheduleStore";
 import { useUIStore } from "../../stores/uiStore";
 import { useNurseStore } from "../../stores/nurseStore";
@@ -9,6 +9,7 @@ import { ScheduleGenerator } from "./ScheduleGenerator";
 import { ScheduleTable } from "./ScheduleTable";
 import { ShiftDetailsModal } from "./ShiftDetailsModal";
 import { RescheduleDialog } from "./RescheduleDialog";
+import { ScheduleHistoryModal } from "./ScheduleHistoryModal";
 import { ConfirmationModal } from "../Common/ConfirmationModal";
 import { Shift } from "../../types";
 import { Transition, Dialog, TransitionChild, DialogPanel, DialogTitle } from "@headlessui/react";
@@ -254,6 +255,7 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({ onAddShift }) => {
 
 	const [showGenerator, setShowGenerator] = useState(false);
 	const [showReschedule, setShowReschedule] = useState(false);
+	const [showHistory, setShowHistory] = useState(false);
 	const [pendingStatus, setPendingStatus] = useState<"Published" | "Archived" | null>(null);
 
 	// the schedule of the month being looked at
@@ -337,6 +339,16 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({ onAddShift }) => {
 						<span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
 							{activeSchedule.status}
 						</span>
+					)}
+
+					{activeSchedule && (
+						<button
+							onClick={() => setShowHistory(true)}
+							className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+						>
+							<History className="h-4 w-4" />
+							History
+						</button>
 					)}
 
 					{canModify && (
@@ -463,6 +475,15 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({ onAddShift }) => {
 				<RescheduleDialog
 					isOpen={showReschedule}
 					onClose={() => setShowReschedule(false)}
+					schedule={activeSchedule}
+				/>
+			)}
+
+			{/* History */}
+			{activeSchedule && showHistory && (
+				<ScheduleHistoryModal
+					isOpen={showHistory}
+					onClose={() => setShowHistory(false)}
 					schedule={activeSchedule}
 				/>
 			)}

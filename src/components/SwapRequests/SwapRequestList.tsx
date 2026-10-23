@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Search, Filter, RefreshCw, Clock, CheckCircle, XCircle, Eye, MessageSquare } from 'lucide-react';
+import { Search, Filter, RefreshCw, Clock, CheckCircle, XCircle, Eye, MessageSquare, Ban } from 'lucide-react';
 import { useScheduleStore } from '../../stores/scheduleStore';
 import { useNurseStore } from '../../stores/nurseStore';
 import { useNotificationStore } from '../../stores/notificationStore';
-import { SwapRequest, SwapRequestFilters } from '../../types';
+import { SwapRequest, SwapRequestFilters, SwapCheckResult } from '../../types';
 import { LoadingSpinner } from '../Common/LoadingSpinner';
 
 interface SwapRequestCardProps {
@@ -13,6 +13,7 @@ interface SwapRequestCardProps {
   target: any;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  onCancel: (id: string) => void;
   onView: (request: SwapRequest) => void;
 }
 
@@ -22,6 +23,7 @@ const SwapRequestCard: React.FC<SwapRequestCardProps> = ({
   target,
   onApprove,
   onReject,
+  onCancel,
   onView,
 }) => {
   const statusColors = {
@@ -97,6 +99,14 @@ const SwapRequestCard: React.FC<SwapRequestCardProps> = ({
         {request.status === 'Pending' && (
           <>
             <button
+              onClick={() => onCancel(request.id)}
+              title="Withdraw this request"
+              className="flex items-center justify-center gap-2 px-3 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              <Ban className="h-4 w-4" />
+              Cancel
+            </button>
+            <button
               onClick={() => onReject(request.id)}
               className="flex items-center justify-center gap-2 px-3 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
             >
@@ -122,6 +132,7 @@ export const SwapRequestList: React.FC = () => {
     swapRequests, 
     approveSwapRequest, 
     rejectSwapRequest, 
+    cancelSwapRequest,
     fetchSwapRequests,
     loadingState 
   } = useScheduleStore();
@@ -150,11 +161,7 @@ export const SwapRequestList: React.FC = () => {
         message: 'The shift swap has been processed',
       });
     } catch (error) {
-      addNotification({
-        type: 'error',
-        title: 'Failed to approve request',
-        message: 'Please try again',
-      });
+      // the store already showed the server's reason (for example the conflicts the swap would cause)
     }
   };
 
@@ -166,11 +173,15 @@ export const SwapRequestList: React.FC = () => {
         title: 'Swap request rejected',
       });
     } catch (error) {
-      addNotification({
-        type: 'error',
-        title: 'Failed to reject request',
-        message: 'Please try again',
-      });
+      // the store already showed the server's reason
+    }
+  };
+
+  const handleCancel = async (requestId: string) => {
+    try {
+      await cancelSwapRequest(requestId);
+    } catch (error) {
+      // the store already showed the server's reason
     }
   };
 
@@ -298,6 +309,7 @@ export const SwapRequestList: React.FC = () => {
                 target={target}
                 onApprove={handleApprove}
                 onReject={handleReject}
+                onCancel={handleCancel}
                 onView={setSelectedRequest}
               />
             );
@@ -312,6 +324,7 @@ export const SwapRequestList: React.FC = () => {
           onClose={() => setSelectedRequest(null)}
           onApprove={handleApprove}
           onReject={handleReject}
+          onCancel={handleCancel}
         />
       )}
     </div>
@@ -323,9 +336,23 @@ const SwapRequestDetail: React.FC<{
   onClose: () => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
-}> = ({ request, onClose, onApprove, onReject }) => {
+  onCancel: (id: string) => void;
+}> = ({ request, onClose, onApprove, onReject, onCancel }) => {
   const { nurses } = useNurseStore();
-  const { shifts } = useScheduleStore();
+  const { shifts, checkSwapRequest } = useScheduleStore();
+  const [check, setCheck] = useState<SwapCheckResult | null>(null);
+
+  // Ask the server whether this swap could be approved right now, so the manager sees why not before clicking.
+  useEffect(() => {
+    let cancelled = false;
+    setCheck(null);
+    if (request.status === 'Pending') {
+      checkSwapRequest(request.id)
+        .then(result => { if (!cancelled) setCheck(result); })
+        .catch(() => { if (!cancelled) setCheck(null); });
+    }
+    return () => { cancelled = true; };
+  }, [request.id, request.status, checkSwapRequest]);
   
   const requester = nurses.find(n => n.id === request.requesterId);
   const target = nurses.find(n => n.id === request.targetId);
@@ -420,9 +447,32 @@ const SwapRequestDetail: React.FC<{
             </div>
           )}
 
+          {/* Approval check */}
+          {request.status === 'Pending' && check && (
+            <div className={`rounded-lg border p-4 ${check.canApprove ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+              {check.canApprove ? (
+                <p className="text-sm text-green-800">This swap can be approved: it causes no new conflicts.</p>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-amber-900 mb-1">This swap cannot be approved right now:</p>
+                  <ul className="list-disc pl-5 text-sm text-amber-900">
+                    {check.problems.map((problem, i) => <li key={i}>{problem}</li>)}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Actions */}
           {request.status === 'Pending' && (
             <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-200">
+              <button
+                onClick={() => onCancel(request.id)}
+                className="flex items-center gap-2 px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <Ban className="h-4 w-4" />
+                Withdraw Request
+              </button>
               <button
                 onClick={() => onReject(request.id)}
                 className="flex items-center gap-2 px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
@@ -432,7 +482,8 @@ const SwapRequestDetail: React.FC<{
               </button>
               <button
                 onClick={() => onApprove(request.id)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-colors"
+                disabled={check !== null && !check.canApprove}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <CheckCircle className="h-4 w-4" />
                 Approve Request

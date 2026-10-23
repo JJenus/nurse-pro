@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import { Wand2, Settings, Save, AlertCircle, CheckCircle } from 'lucide-react';
 import { useScheduleStore } from '../../stores/scheduleStore';
 import { useNotificationStore } from '../../stores/notificationStore';
-import { ScheduleRule, ScheduleGenerationParams } from '../../types';
+import { ScheduleRule, ScheduleGenerationParams, ScheduleGenerationResult } from '../../types';
 import { LoadingSpinner } from '../Common/LoadingSpinner';
 
 const schema = yup.object({
@@ -62,10 +62,11 @@ const defaultRules: ScheduleRule[] = [
 ];
 
 export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose }) => {
-  const { generateSchedule, loadingState } = useScheduleStore();
+  const { generateSchedule, previewSchedule, loadingState } = useScheduleStore();
   const { addNotification } = useNotificationStore();
   const [rules, setRules] = useState<ScheduleRule[]>(defaultRules);
-  const [step, setStep] = useState<'config' | 'rules' | 'generating'>('config');
+  const [step, setStep] = useState<'config' | 'rules' | 'generating' | 'preview'>('config');
+  const [preview, setPreview] = useState<{ result: ScheduleGenerationResult; params: ScheduleGenerationParams; month: number; year: number } | null>(null);
 
   const {
     register,
@@ -106,10 +107,7 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
     ));
   };
 
-  const onSubmit = async (data: FormData) => {
-    setStep('generating');
-    
-    const params: ScheduleGenerationParams = {
+  const buildParams = (data: FormData): ScheduleGenerationParams => ({
       month: data.month,
       year: data.year,
       rules: rules.filter(rule => rule.enabled),
@@ -121,7 +119,46 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
         maxConsecutiveDay: data.maxConsecutiveDay,
         maxConsecutiveNight: data.maxConsecutiveNight,
       },
-    };
+  });
+
+  // Generates the schedule without saving it, so it can be reviewed first. The seed makes "Save" reproduce it exactly.
+  const onPreview = async (data: FormData) => {
+    setStep('generating');
+    try {
+      const params = buildParams(data);
+      const result = await previewSchedule(params);
+      setPreview({ result, params, month: data.month, year: data.year });
+      setStep('preview');
+    } catch (error) {
+      const apiError = error as { message?: string; code?: string };
+      addNotification({
+        type: 'error',
+        title: apiError?.code === 'CONFLICT' ? 'Schedule already exists' : 'Could not preview the schedule',
+        message: apiError?.message || 'Please check your configuration and try again',
+      });
+      setStep('rules');
+    }
+  };
+
+  const savePreview = async () => {
+    if (!preview) return;
+    setStep('generating');
+    try {
+      await generateSchedule(preview.month, preview.year, { ...preview.params, seed: preview.result.seed ?? undefined }, attemptKey.current);
+      addNotification({
+        type: 'success',
+        title: 'Schedule generated successfully',
+        message: `Generated schedule for ${format(new Date(preview.year, preview.month - 1), 'MMMM yyyy')}`,
+      });
+      onClose();
+    } catch {
+      setStep('preview');
+    }
+  };
+
+  const onSubmit = async (data: FormData) => {
+    setStep('generating');
+    const params = buildParams(data);
 
     try {
       await generateSchedule(data.month, data.year, params, attemptKey.current);
@@ -436,6 +473,14 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
                   Back
                 </button>
                 <button
+                  type="button"
+                  onClick={handleSubmit(onPreview)}
+                  disabled={rules.filter(r => r.enabled).length === 0}
+                  className="px-4 py-2 border border-blue-600 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+                >
+                  Preview first
+                </button>
+                <button
                   type="submit"
                   disabled={rules.filter(r => r.enabled).length === 0}
                   className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors disabled:opacity-50"
@@ -446,6 +491,57 @@ export const ScheduleGenerator: React.FC<ScheduleGeneratorProps> = ({ onClose })
               </div>
             </div>
           )}
+          {step === 'preview' && preview && (() => {
+            const { result } = preview;
+            const shifts = result.schedule.shifts;
+            const short = result.conflicts.filter(c => c.type === 'understaffed').length;
+            const other = result.conflicts.length - short;
+            const counts = result.stats.map(s => s.shiftsCount);
+            const hours = result.stats.map(s => s.totalHours);
+            return (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Preview: {format(new Date(preview.year, preview.month - 1), 'MMMM yyyy')}
+                  </h3>
+                  <p className="text-sm text-gray-600">Nothing has been saved yet.</p>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-gray-50 rounded-lg p-3"><div className="text-2xl font-semibold">{shifts.length}</div><div className="text-sm text-gray-600">shifts</div></div>
+                  <div className={`rounded-lg p-3 ${short ? 'bg-amber-50' : 'bg-green-50'}`}><div className="text-2xl font-semibold">{short}</div><div className="text-sm text-gray-600">short of staff</div></div>
+                  <div className={`rounded-lg p-3 ${other ? 'bg-amber-50' : 'bg-green-50'}`}><div className="text-2xl font-semibold">{other}</div><div className="text-sm text-gray-600">other conflicts</div></div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="text-2xl font-semibold">{counts.length ? `${Math.min(...counts)}–${Math.max(...counts)}` : '0'}</div>
+                    <div className="text-sm text-gray-600">shifts per nurse{hours.length ? ` (${Math.round(Math.min(...hours))}–${Math.round(Math.max(...hours))}h)` : ''}</div>
+                  </div>
+                </div>
+
+                {result.conflicts.length > 0 && (
+                  <ul className="max-h-48 overflow-y-auto space-y-1 text-sm">
+                    {result.conflicts.slice(0, 20).map((c, i) => (
+                      <li key={i} className="bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
+                        <span className="font-medium">{c.date ? format(new Date(`${c.date}T00:00:00`), 'EEE d MMM') : ''}</span> {c.message}
+                      </li>
+                    ))}
+                    {result.conflicts.length > 20 && (
+                      <li className="text-gray-500 px-3">and {result.conflicts.length - 20} more</li>
+                    )}
+                  </ul>
+                )}
+
+                <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+                  <button type="button" onClick={() => setStep('rules')} className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Back
+                  </button>
+                  <button type="button" onClick={savePreview} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700">
+                    <Wand2 className="h-4 w-4" />
+                    Save this schedule
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </form>
       </div>
     </div>
